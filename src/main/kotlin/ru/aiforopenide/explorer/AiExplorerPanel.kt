@@ -1,5 +1,6 @@
 package ru.aiforopenide.explorer
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -31,6 +32,10 @@ class AiExplorerPanel(
             isBorderPainted = false
             isContentAreaFilled = false
             isFocusPainted = false
+            text = null
+            icon = AllIcons.Actions.Share
+            toolTipText = "Показать граф активности"
+            accessibleContext.accessibleName = toolTipText
             horizontalAlignment = SwingConstants.LEFT
             border = JBUI.Borders.empty(5, 8)
             font = JBUI.Fonts.smallFont()
@@ -39,7 +44,9 @@ class AiExplorerPanel(
             graphVisible = !graphVisible
             if (graphVisible) showGraph()
             cardLayout.show(content, if (graphVisible) "graph" else "terminal")
-            toggleButton.text = if (graphVisible) "Терминал" else "Граф файлов"
+            toggleButton.icon = if (graphVisible) AllIcons.Debugger.Console else AllIcons.Actions.Share
+            toggleButton.toolTipText = if (graphVisible) "Вернуться в терминал" else "Показать граф активности"
+            toggleButton.accessibleContext.accessibleName = toggleButton.toolTipText
             if (!graphVisible) requestTerminalFocus()
         }
         val togglePanel = JPanel(BorderLayout()).apply {

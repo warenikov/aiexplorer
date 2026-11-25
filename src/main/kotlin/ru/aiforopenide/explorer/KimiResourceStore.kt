@@ -6,6 +6,7 @@ import com.google.gson.JsonParser
 import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.name
 import kotlin.streams.asSequence
 
@@ -30,9 +31,33 @@ class KimiResourceStore(projectPath: Path) {
         roots += Triple("Глобальные", "global", home.resolve(".agents/skills"))
         extraSkillDirectories().forEach { roots += Triple("Дополнительные", "extra", it) }
         return JsonArray().apply {
-            roots.filter { Files.isDirectory(it.third) }.forEach { (label, scope, root) ->
-                add(group("$label · ${root.displayName()}", root, scope))
+            roots.filter { Files.isDirectory(it.third) }.forEach { (_, scope, root) ->
+                Files.list(root).use { paths ->
+                    paths.asSequence().sortedBy { it.name.lowercase() }.forEach { path ->
+                        when {
+                            Files.isDirectory(path) && Files.isRegularFile(path.resolve("SKILL.md")) ->
+                                add(skillNode(path.resolve("SKILL.md"), path, scope))
+                            Files.isRegularFile(path) && path.name.endsWith(".md", true) ->
+                                add(skillNode(path, null, scope))
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    private fun skillNode(mainFile: Path, directory: Path?, scope: String): JsonObject {
+        val text = try { Files.readString(mainFile) } catch (_: Exception) { "" }
+        val name = readFrontmatter(text, "name")
+            ?: (directory?.name ?: mainFile.name.removeSuffix(".md"))
+        return node(name, mainFile, scope, readFrontmatter(text, "description")).apply {
+            addProperty("kind", "skill")
+            addProperty("root", (directory ?: mainFile.parent).toString())
+            add("files", directory?.let { directoryTree(it, scope) }
+                ?: JsonArray().apply { add(node(mainFile.name, mainFile, scope)) })
+            add("links", JsonArray().apply {
+                localMarkdownLinks(mainFile, text).forEach { add(node(it.name, it, scope)) }
+            })
         }
     }
 
@@ -84,13 +109,126 @@ class KimiResourceStore(projectPath: Path) {
                     val url = config.get("url")?.asString
                     val target = command ?: url?.let(::safeUrlHost) ?: "MCP"
                     val enabled = config.get("enabled")?.asBoolean != false
-                    entries.add(node(name, path, scope, "$target · ${if (enabled) "включён" else "выключен"}${if (name in overridden) " · переопределяет глобальный" else ""}"))
+                    entries.add(node(name, path, scope, "$target · ${if (enabled) "включён" else "выключен"}${if (name in overridden) " · переопределяет глобальный" else ""}").apply {
+                        addProperty("serverId", "$path#$name")
+                        add("config", JsonObject().apply {
+                            addProperty("transport", config.get("transport")?.asString ?: if (command != null) "stdio" else "http")
+                            addProperty("command", command.orEmpty())
+                            addProperty("url", url?.let(::editableUrl).orEmpty())
+                            addProperty("hiddenUrl", url != null && editableUrl(url).isEmpty())
+                            addProperty("cwd", config.get("cwd")?.asString.orEmpty())
+                            addProperty("bearerTokenEnvVar", config.get("bearerTokenEnvVar")?.asString.orEmpty())
+                            addProperty("enabled", enabled)
+                            addProperty("deferred", config.get("deferred")?.asBoolean == true)
+                        })
+                    })
                 }
             } catch (_: Exception) {
                 entries.add(node("Ошибка чтения конфигурации", path, scope, "Открыть файл"))
             }
         }
         return group(title, if (Files.isRegularFile(path)) path else null, scope, entries, if (entries.size() == 0) "Нет конфигурации" else null)
+    }
+
+    fun saveMcp(input: JsonObject) {
+        val scope = input.get("scope")?.asString ?: throw IllegalArgumentException("Scope is required")
+        val path = mcpPath(scope)
+        val name = input.get("name")?.asString?.trim().orEmpty()
+        require(name.isNotEmpty()) { "Server name is required" }
+        require(!name.contains("#")) { "Invalid server name" }
+        val oldName = input.get("oldName")?.asString?.takeIf(String::isNotBlank)
+        val root = readMcp(path)
+        val servers = root.getAsJsonObject("mcpServers") ?: JsonObject().also { root.add("mcpServers", it) }
+        val config = oldName?.let { servers.getAsJsonObject(it)?.deepCopy() }
+            ?: servers.getAsJsonObject(name)?.deepCopy() ?: JsonObject()
+        val transport = input.get("transport")?.asString ?: "stdio"
+        require(transport in setOf("stdio", "http", "sse"))
+        if (transport == "stdio") {
+            val command = input.get("command")?.asString?.trim().orEmpty()
+            require(command.isNotEmpty()) { "Command is required" }
+            config.addProperty("command", command)
+            config.remove("url")
+            config.remove("transport")
+        } else {
+            val url = input.get("url")?.asString?.trim().orEmpty()
+            if (url.isNotEmpty()) {
+                val uri = URI(url)
+                require(uri.scheme in setOf("http", "https") && uri.host != null) { "Invalid URL" }
+                config.addProperty("url", url)
+            } else {
+                require(config.get("url")?.asString?.isNotBlank() == true) { "URL is required" }
+            }
+            config.remove("command")
+            config.remove("args")
+            if (transport == "sse") config.addProperty("transport", "sse") else config.remove("transport")
+        }
+        setOptional(config, "cwd", input.get("cwd")?.asString)
+        setOptional(config, "bearerTokenEnvVar", input.get("bearerTokenEnvVar")?.asString)
+        config.addProperty("enabled", input.get("enabled")?.asBoolean != false)
+        config.addProperty("deferred", input.get("deferred")?.asBoolean == true)
+        val args = input.get("args")?.asString.orEmpty()
+        if (args.isNotBlank() && transport == "stdio") {
+            config.add("args", JsonArray().apply { args.lines().map(String::trim).filter(String::isNotEmpty).forEach(::add) })
+        }
+        val envText = input.get("env")?.asString.orEmpty()
+        if (envText.isNotBlank() && transport == "stdio") {
+            val env = config.getAsJsonObject("env") ?: JsonObject()
+            envText.lines().map(String::trim).filter(String::isNotEmpty).forEach { line ->
+                val separator = line.indexOf('=')
+                require(separator > 0) { "Environment entry must be KEY=value" }
+                val key = line.substring(0, separator)
+                require(Regex("[A-Za-z_][A-Za-z0-9_]*").matches(key)) { "Invalid environment variable" }
+                env.addProperty(key, line.substring(separator + 1))
+            }
+            config.add("env", env)
+        }
+        if (oldName != null && oldName != name) servers.remove(oldName)
+        servers.add(name, config)
+        writeMcp(path, root)
+    }
+
+    fun deleteMcp(scope: String, name: String) {
+        val path = mcpPath(scope)
+        val root = readMcp(path)
+        root.getAsJsonObject("mcpServers")?.remove(name)
+        writeMcp(path, root)
+    }
+
+    private fun mcpPath(scope: String): Path = when (scope) {
+        "global" -> kimiHome.resolve("mcp.json")
+        "project" -> project.resolve(".kimi-code/mcp.json")
+        else -> throw IllegalArgumentException("Invalid MCP scope")
+    }
+
+    private fun readMcp(path: Path): JsonObject {
+        if (!Files.isRegularFile(path)) return JsonObject()
+        return JsonParser.parseString(Files.readString(path)).asJsonObject
+    }
+
+    private fun writeMcp(path: Path, root: JsonObject) {
+        Files.createDirectories(path.parent)
+        val temporary = Files.createTempFile(path.parent, "mcp-", ".json")
+        try {
+            Files.writeString(temporary, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(root) + "\n")
+            try {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+
+    private fun setOptional(config: JsonObject, key: String, value: String?) {
+        if (value.isNullOrBlank()) config.remove(key) else config.addProperty(key, value.trim())
+    }
+
+    private fun editableUrl(value: String): String = try {
+        val uri = URI(value)
+        if (uri.userInfo == null && uri.query == null && uri.fragment == null && uri.host != null) value else ""
+    } catch (_: Exception) {
+        ""
     }
 
     private fun safeUrlHost(value: String): String = try {
@@ -143,7 +281,7 @@ class KimiResourceStore(projectPath: Path) {
                 if (Files.isDirectory(path) && path.name !in ignoredDirectories) {
                     result.add(group(path.name, path, scope, directoryTree(path, scope)))
                 } else if (Files.isRegularFile(path)) {
-                    result.add(documentNode(path, scope))
+                    result.add(node(path.name, path, scope))
                 }
             }
         }

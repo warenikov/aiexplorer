@@ -1,472 +1,97 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Explorer — карта активности</title>
-  <!--
-    Map visualization adapted from https://github.com/alexeyw/lot-map
-    Copyright (c) 2026 Aleksei Volodin
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE.
-  -->
-  <style>
-    :root {
-      color-scheme: dark;
-      --ground: #0a0c11;
-      --raised: #12151c;
-      --line: #272c36;
-      --spoke: #1a1e27;
-      --bone: #ebe6dc;
-      --ash: #9ba1ab;
-      --dim: #6b7280;
-      --accent: #e1ac6e;
-      --hot: #f0c595;
-      --red: #e8654f;
-      --trail: #ebe6dd;
-      --memory: #62c7ba;
-    }
-    :root[data-theme="light"] {
-      color-scheme: light;
-      --ground: #f5f2ea;
-      --raised: #ffffff;
-      --line: #cfc9bc;
-      --spoke: #e3ded2;
-      --bone: #1f2228;
-      --ash: #5f6570;
-      --dim: #8b909a;
-      --accent: #b8762a;
-      --hot: #8f560f;
-      --red: #c5402b;
-      --trail: #9c978b;
-      --memory: #1c8c81;
-    }
-    * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; margin: 0; }
-    body {
-      overflow: hidden;
-      background: var(--ground);
-      color: var(--bone);
-      font-family: "SF Mono", ui-monospace, Menlo, monospace;
-      font-size: 12px;
-    }
-    button { font: inherit; }
-    .app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-    .toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      min-height: 42px;
-      padding: 6px 14px;
-      border-bottom: 1px solid var(--line);
-      color: var(--ash);
-    }
-    .title { color: var(--bone); font-size: 13px; font-weight: 600; }
-    .summary { margin-left: 10px; color: var(--dim); }
-    .zoom { display: flex; gap: 4px; }
-    .zoom button, .back {
-      border: 1px solid var(--line);
-      border-radius: 5px;
-      background: var(--raised);
-      color: var(--ash);
-      cursor: pointer;
-    }
-    .zoom button { width: 28px; height: 26px; }
-    .zoom button:hover, .back:hover { color: var(--hot); border-color: var(--accent); }
-    .map-wrap {
-      position: relative;
-      flex: 1 1 auto;
-      min-height: 260px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-    svg { display: block; width: min(100%, 650px); height: 100%; max-height: 570px; }
-    .orbit { fill: none; stroke: var(--line); stroke-width: .7; opacity: .45; stroke-dasharray: 2 5; }
-    .spoke { stroke: var(--spoke); stroke-linecap: round; }
-    .spoke-worn { stroke: var(--accent); stroke-linecap: round; }
-    .route { fill: none; stroke: var(--trail); stroke-linecap: round; }
-    .station { cursor: pointer; }
-    .station .node { fill: var(--raised); stroke: var(--line); stroke-width: 1.2; transition: stroke .2s; }
-    .station:hover .node, .station.selected .node { stroke: var(--hot); }
-    .station .glyph { fill: none; stroke: var(--ash); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
-    .station.active .glyph, .station.recent .glyph { stroke: var(--hot); }
-    .station.error .glyph { stroke: var(--red); }
-    .station-label { font-size: 11.5px; text-anchor: middle; }
-    .station-count { fill: var(--dim); font-size: 9.5px; text-anchor: middle; }
-    .station-halo { fill: var(--accent); opacity: 0; }
-    .station-ring { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: 0; }
-    .station.active .station-ring { opacity: .85; }
-    .station.error .station-ring { stroke: var(--red); }
-    .clock { fill: none; stroke: var(--hot); stroke-width: 2; stroke-dasharray: 1 1; animation: clock 8s linear infinite; transform-box: fill-box; transform-origin: center; }
-    .core-halo { fill: var(--accent); opacity: .06; animation: core-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
-    .core { fill: var(--raised); stroke: var(--line); stroke-width: 1.3; }
-    .core.busy { stroke: var(--accent); }
-    .core-name { fill: var(--bone); font-size: 17px; font-weight: 500; letter-spacing: 2.5px; text-anchor: middle; }
-    .core-subtitle { fill: var(--ash); font-size: 9px; text-anchor: middle; }
-    .badge { fill: var(--raised); stroke: var(--accent); stroke-width: 1; }
-    .badge-text { fill: var(--hot); font-size: 8.5px; text-anchor: middle; }
-    .error-badge { fill: var(--red); }
-    .error-badge-text { fill: var(--ground); font-size: 9px; font-weight: 700; text-anchor: middle; }
-    .now {
-      padding: 9px 18px;
-      border-top: 1px solid var(--line);
-      color: var(--bone);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .feed { flex: 0 0 190px; min-height: 0; overflow: auto; padding: 4px 18px 14px; }
-    .row {
-      display: grid;
-      grid-template-columns: 12px 116px minmax(0, 1fr) 74px;
-      gap: 8px;
-      align-items: center;
-      min-height: 25px;
-      color: var(--ash);
-    }
-    .row .dot { color: var(--dim); }
-    .row.running .dot, .row.running .row-status { color: var(--hot); }
-    .row.failed .dot, .row.failed .row-status { color: var(--red); }
-    .row-station { color: var(--ash); }
-    .row-label, .file-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .row-status { text-align: right; color: var(--dim); font-size: 11px; }
-    .row-button { padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
-    .row-button:hover { color: var(--hot); }
-    .details {
-      position: absolute;
-      inset: 12px;
-      z-index: 2;
-      display: flex;
-      flex-direction: column;
-      padding: 14px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--ground);
-      box-shadow: 0 12px 40px #0006;
-    }
-    .details[hidden] { display: none; }
-    .details-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .details-title { color: var(--hot); font-size: 13px; }
-    .back { padding: 5px 9px; }
-    .details-list { overflow: auto; }
-    .detail {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 80px;
-      gap: 10px;
-      width: 100%;
-      padding: 8px 4px;
-      border: 0;
-      border-bottom: 1px solid var(--line);
-      background: transparent;
-      color: var(--ash);
-      text-align: left;
-    }
-    .detail.clickable { cursor: pointer; }
-    .detail.clickable:hover { color: var(--hot); }
-    .detail-count { color: var(--dim); text-align: right; }
-    .empty { padding: 24px; color: var(--dim); text-align: center; }
-    @keyframes core-breathe { 0%, 100% { transform: scale(.96); opacity: .05; } 50% { transform: scale(1.08); opacity: .12; } }
-    @keyframes clock { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .station-halo, .core-halo, .clock { animation: none !important; }
-    }
-  </style>
-</head>
-<body>
-<div class="app">
-  <div class="toolbar">
-    <div><span class="title">Карта активности</span><span class="summary" id="summary">0 действий</span></div>
-    <div class="zoom">
-      <button id="zoom-out" title="Уменьшить">−</button>
-      <button id="zoom-fit" title="По размеру">□</button>
-      <button id="zoom-in" title="Увеличить">+</button>
-    </div>
-  </div>
-  <div class="map-wrap">
-    <svg id="map" viewBox="0 0 460 430" role="img" aria-label="Карта активности Kimi Code"></svg>
-    <div class="details" id="details" hidden>
-      <div class="details-header"><span class="details-title" id="details-title"></span><button class="back" id="details-close">Карта</button></div>
-      <div class="details-list" id="details-list"></div>
-    </div>
-  </div>
-  <div class="now" id="now">Ожидание вызовов инструментов</div>
-  <div class="feed" id="feed"></div>
-</div>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Explorer — Активность</title>
+<!--
+  Visualization adapted from https://github.com/alexeyw/lot-map
+  Copyright (c) 2026 Aleksei Volodin
+  MIT License: permission is granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files, to deal in the Software without
+  restriction, including without limitation the rights to use, copy, modify, merge,
+  publish, distribute, sublicense, and/or sell copies of the Software, subject to
+  inclusion of this copyright and permission notice. THE SOFTWARE IS PROVIDED AS IS,
+  WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING ALL WARRANTIES AND
+  LIABILITY ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+-->
+<style>
+:root{color-scheme:dark;--bg:#0a0c11;--raised:#12151c;--line:#272c36;--text:#ebe6dc;--secondary:#9ba1ab;--faint:#6b7280;--accent:#e1ac6e;--hot:#f0c595;--red:#e8654f;--green:#62c7ba}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0}body{overflow:hidden;background:var(--bg);color:var(--text);font:12px "JetBrains Mono","SFMono-Regular",Consolas,monospace}button,input{font:inherit}button{color:inherit;cursor:pointer}.app{height:100%;display:flex;flex-direction:column}.toolbar{height:48px;flex-shrink:0;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line)}.toolbar strong{font-size:13px}.toolbar span{margin-left:10px;color:var(--faint)}.toolbar button{margin-left:auto;border:0;background:transparent;color:var(--secondary)}.stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}svg{display:block;width:100%;height:100%;max-height:720px}.source,.result{cursor:pointer}.source,.result,.center-node{touch-action:none}.center-node{cursor:grab}.dragging{cursor:grabbing!important}.card{fill:var(--raised);stroke:var(--line);stroke-width:1}.source:hover .card,.result:hover .card,.selected .card{stroke:var(--accent)}.muted{opacity:.22}.active{opacity:1}.card-title{fill:var(--text);font-size:12px}.card-count{fill:var(--secondary);font-size:10px;text-anchor:end}.card-icon{fill:var(--faint);font-size:12px}.ribbon{transition:opacity .2s}.center{fill:var(--raised);stroke:var(--accent);stroke-width:1.5;filter:drop-shadow(0 0 12px #e1ac6e38);animation:center-glow 3.2s ease-in-out infinite}.center-inner{fill:none;stroke:var(--line)}.center-number{fill:var(--text);font-size:29px;text-anchor:middle}.center-label{fill:var(--secondary);font-size:9px;text-anchor:middle}.center-ring{fill:none;stroke:var(--accent);opacity:.25;stroke-width:6}.hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:var(--faint);font-size:10px;pointer-events:none}.details{position:absolute;inset:12px;z-index:3;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:var(--bg);box-shadow:0 12px 40px #0008}.details[hidden]{display:none}.details-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}.details-head h2{margin:0;font-size:14px;font-weight:500}.details-head .summary{color:var(--faint);font-size:10px}.back{margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:4px;background:var(--raised);color:var(--secondary)}.chips{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px}.chip{padding:5px 8px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--secondary);font-size:10px}.chip.active{border-color:var(--accent);color:var(--accent)}.table-wrap{flex:1;min-height:0;overflow:auto;padding:0 16px 16px}.table-head,.entry{display:grid;grid-template-columns:minmax(0,1fr) 76px 90px;gap:10px;align-items:center}.table-head{padding:7px 10px;color:var(--faint);font-size:9px;text-transform:uppercase}.entry{width:100%;padding:10px;border:1px solid var(--line);border-radius:4px;background:var(--raised);text-align:left}.entry:hover{border-color:var(--accent)}.entry-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.entry-count{color:var(--secondary);text-align:right}.entry-time{color:var(--faint);text-align:right;font-size:10px}.history{margin:0 0 8px 14px;padding:7px 10px;border-left:1px solid var(--accent);background:var(--raised)}.history-row{display:grid;grid-template-columns:66px minmax(0,1fr) 66px;gap:8px;padding:5px 0;color:var(--secondary);font-size:10px}.history-row span:last-child{text-align:right;color:var(--faint)}.empty{padding:40px;text-align:center;color:var(--faint)}
+.card{fill:#101216;stroke:#252931}.card-title{font-size:13px}.card-count{fill:var(--text);font-size:27px;text-anchor:start}.card-note{fill:var(--faint);font-size:9px}.card-dot{stroke:none}.compact .card-title{font-size:11px}.compact .card-count{font-size:10px;text-anchor:end;fill:var(--secondary)}.center-number{fill:var(--accent);font-size:34px}.center-label{letter-spacing:1px}.center-kimi{fill:var(--text);font-size:15px;text-anchor:middle;letter-spacing:2px}.ribbon{opacity:.9}.pulse{pointer-events:none}.details{font-size:12px}.source.selected,.result.selected{animation:soft-highlight .45s ease-out}@keyframes soft-highlight{0%{filter:brightness(1.65)}100%{filter:brightness(1)}}@keyframes ribbon-settle{0%{filter:brightness(1.4)}100%{filter:brightness(1)}}@keyframes center-glow{0%,100%{filter:drop-shadow(0 0 8px #e1ac6e28)}50%{filter:drop-shadow(0 0 20px #e1ac6e55)}}@media(prefers-reduced-motion:reduce){.source,.result,.ribbon{animation:none}.pulse{display:none}}
+</style></head>
+<body><div class="app"><header class="toolbar"><strong>Активность сессии</strong><span id="summary">0 действий</span><button id="reset">Сбросить фильтр</button></header><main class="stage"><svg id="map" viewBox="0 0 1200 600" role="img" aria-label="Потоки активности Kimi"></svg><div class="hint" id="hint">Клик фильтрует · повторный клик открывает детали</div><section class="details" id="details" hidden><header class="details-head"><h2 id="details-title"></h2><span class="summary" id="details-summary"></span><button class="back" id="details-close">Карта</button></header><div class="chips" id="chips"></div><div class="table-wrap"><div class="table-head"><span>Объект / команда</span><span>Обращения</span><span>Последний раз</span></div><div id="entries"></div></div></section></main></div>
 <script>
-  const stations = [
-    { id: "project", label: "Файлы", icon: "M-5.5 -8h7.5l3.5 3.5v12.5h-11zM2 -8v3.5h3.5" },
-    { id: "docs", label: "Документация", icon: "M-6 -8h12v16h-12zM-3 -4h6M-3 0h6M-3 4h4" },
-    { id: "skills", label: "Скиллы", icon: "M1.5 -8.5L-5.5 1h4.5l-1.5 7.5l7.5 -9.8h-4.5z" },
-    { id: "config", label: "Конфигурация", icon: "M-7 -7h14v14h-14zM-3 -3h6M-3 1h6M-3 5h3" },
-    { id: "shell", label: "Терминал", icon: "M-7.5 -5l5 5l-5 5M0 6h7.5" },
-    { id: "internet", label: "Сеть", icon: "M-7.8 0a7.8 7.8 0 1 0 15.6 0a7.8 7.8 0 1 0 -15.6 0M-7.8 0h15.6M0 -7.8c-4.2 4.2 -4.2 11.4 0 15.6M0 -7.8c4.2 4.2 4.2 11.4 0 15.6" },
-    { id: "agents", label: "Субагенты", icon: "M0 -4v3.5M0 -.5L-6 4M0 -.5L6 4M-2.1 -6a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0M-8.6 5.5a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0M4.4 5.5a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0" }
-  ];
-  const calls = new Map();
-  const W = 460, H = 430, CX = 230, CY = 204, RX = 176, RY = 151, NODE = 22, CORE = 40;
-  let zoom = 1;
-  let selected = null;
-  const map = document.getElementById("map");
-  const feed = document.getElementById("feed");
-  const nowLine = document.getElementById("now");
-  const details = document.getElementById("details");
-  const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
-  const inputOf = tool => tool.rawInput && typeof tool.rawInput === "object" ? tool.rawInput : {};
-  const pathOf = tool => {
-    const input = inputOf(tool);
-    for (const key of ["path", "filePath", "file_path"]) if (typeof input[key] === "string" && input[key].trim()) return input[key];
-    return null;
-  };
-  const urlOf = tool => {
-    const input = inputOf(tool);
-    for (const key of ["url", "uri", "link", "endpoint"]) if (typeof input[key] === "string" && input[key].startsWith("http")) return input[key];
-    return null;
-  };
-  const isAgent = tool => /^agent/i.test((tool.title || "").trim()) || ["subagent_type", "subagentType", "agentType"].some(key => key in inputOf(tool));
-  const isSkill = path => {
-    const value = (path || "").toLowerCase();
-    return value.includes("/.kimi-code/skills/") || value.includes("/.claude/skills/") || value.endsWith("/skill.md");
-  };
-  const stationOf = tool => {
-    if (isAgent(tool)) return "agents";
-    if (/^skill$/i.test((tool.title || "").trim()) || "skill" in inputOf(tool)) return "skills";
-    if (urlOf(tool)) return "internet";
-    const path = pathOf(tool);
-    if (path) {
-      if (isSkill(path)) return "skills";
-      const ext = path.split(".").pop().toLowerCase();
-      if (["md", "mdx"].includes(ext)) return "docs";
-      const name = path.split("/").pop().toLowerCase();
-      if (["json", "yml", "yaml", "toml", "properties", "xml", "lock"].includes(ext) || [".gitignore", ".editorconfig", "dockerfile"].includes(name)) return "config";
-      return "project";
-    }
-    if ("command" in inputOf(tool) || /bash|shell|command/i.test(tool.title || "")) return "shell";
-    return "project";
-  };
-  const hostOf = url => { try { return new URL(url).host; } catch { return "Сетевой запрос"; } };
-  const shortPath = path => path.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
-  const commandName = command => {
-    const first = String(command).trim().split(/\s+/)[0] || "shell";
-    return first.split(/[\\/]/).pop().slice(0, 40);
-  };
-  const labelOf = tool => {
-    const input = inputOf(tool);
-    if (typeof input.skill === "string" && input.skill.trim()) return input.skill.trim();
-    const path = pathOf(tool);
-    if (path) return shortPath(path);
-    const url = urlOf(tool);
-    if (url) return hostOf(url);
-    if (typeof input.command === "string") return commandName(input.command);
-    if (isAgent(tool)) return String(input.description || tool.title || "Субагент").slice(0, 80);
-    return tool.title || "Инструмент";
-  };
-  const point = id => {
-    const index = stations.findIndex(station => station.id === id);
-    const angle = index * Math.PI * 2 / stations.length;
-    return { x: CX + RX * Math.sin(angle), y: CY - RY * Math.cos(angle) };
-  };
-  const edge = (from, to, radius) => {
-    const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-    return { x: from.x + (to.x - from.x) * radius / length, y: from.y + (to.y - from.y) * radius / length };
-  };
-  const pulse = (from, to, color, age) => {
-    const path = `M${from.x} ${from.y}L${to.x} ${to.y}`;
-    return [0, 1, 2].map(index => {
-      const begin = index * .045 - age / 1000;
-      return `<circle r="${3.8 - index * .8}" fill="${color}" opacity="0"><animateMotion path="${path}" begin="${begin}s" dur=".8s" fill="freeze"/><animate attributeName="opacity" values="${1 - index * .3};${1 - index * .3};0" keyTimes="0;.82;1" begin="${begin}s" dur=".8s" fill="freeze"/></circle>`;
-    }).join("");
-  };
-  const routeLeg = (fromId, toId) => {
-    const fromIndex = stations.findIndex(station => station.id === fromId);
-    const toIndex = stations.findIndex(station => station.id === toId);
-    const count = stations.length;
-    let steps = ((toIndex - fromIndex) % count + count) % count;
-    if (steps > count / 2) steps -= count;
-    const bendFactors = [.5, .5, .4, .45, .55, .75];
-    const angle = (fromIndex + steps / 2) * Math.PI * 2 / count;
-    const factor = bendFactors[Math.abs(steps)] ?? .5;
-    const bend = { x: CX + RX * factor * Math.sin(angle), y: CY - RY * factor * Math.cos(angle) };
-    return { start: edge(point(fromId), bend, NODE + 4), bend, end: edge(point(toId), bend, NODE + 4) };
-  };
-  function renderMap() {
-    const all = [...calls.values()];
-    const now = Date.now();
-    const core = { x: CX, y: CY };
-    let body = `<rect width="${W}" height="${H}" rx="12" fill="var(--ground)"/>`;
-    for (const [rx, ry] of [[66, 60], [104, 91], [142, 123]]) body += `<ellipse class="orbit" cx="${CX}" cy="${CY}" rx="${rx}" ry="${ry}"/>`;
-    for (const station of stations) {
-      const p = point(station.id);
-      const own = all.filter(call => call.station === station.id);
-      const a = edge(core, p, CORE + 8), b = edge(p, core, NODE);
-      const worn = Math.min(1, Math.log2(1 + own.length) / 7);
-      body += `<line class="spoke" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke-width="${1 + 2.6 * worn}"/>`;
-      if (worn > 0) body += `<line class="spoke-worn" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke-width="${1 + 2.6 * worn}" opacity="${worn * .55}"/>`;
-    }
-    const states = stations.map(station => {
-      const own = all.filter(call => call.station === station.id);
-      const running = own.filter(call => call.status === "in_progress");
-      const latest = own[own.length - 1];
-      const latestAge = latest ? now - (latest.endedAt || latest.startedAt) : Infinity;
-      const alarm = latest?.status === "failed" && latestAge < 6000;
-      return { station, p: point(station.id), own, running, failed: own.filter(call => call.status === "failed").length, latest, latestAge, alarm, lit: running.length > 0 || latestAge < 3200 };
-    });
-    for (const state of states) {
-      const { p, running, latestAge, alarm, lit } = state;
-      if (running.length) body += `<circle class="station-halo" cx="${p.x}" cy="${p.y}" r="${NODE + 10}" style="opacity:.16"/>`;
-      else if (lit || alarm) {
-        const span = alarm ? 6000 : 3200;
-        body += `<circle class="station-halo" cx="${p.x}" cy="${p.y}" r="${NODE + 10}" style="opacity:.3"><animate attributeName="opacity" values=".3;0" begin="${-latestAge / 1000}s" dur="${span / 1000}s" fill="freeze"/></circle>`;
-      }
-      if (running.length) body += `<circle cx="${p.x}" cy="${p.y}" r="${NODE}" fill="none" stroke="var(--accent)" stroke-width="1.3"><animate attributeName="r" values="${NODE};${NODE + 15}" dur="1.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0" dur="1.4s" repeatCount="indefinite"/></circle>`;
-    }
-    const route = [];
-    for (const call of all) {
-      const last = route[route.length - 1];
-      if (last?.station === call.station) last.at = call.startedAt;
-      else route.push({ station: call.station, at: call.startedAt });
-    }
-    const recentRoute = route.slice(-7);
-    for (let index = 1; index < recentRoute.length; index++) {
-      const target = recentRoute[index];
-      const age = now - target.at;
-      if (age >= 60000) continue;
-      const { start, bend, end } = routeLeg(recentRoute[index - 1].station, target.station);
-      const opacity = .12 + .5 * index / Math.max(1, recentRoute.length - 1);
-      body += `<path class="route" d="M${start.x} ${start.y}Q${bend.x} ${bend.y} ${end.x} ${end.y}" stroke-width="${index === recentRoute.length - 1 ? 1.5 : 1.1}" opacity="${opacity}"><animate attributeName="opacity" values="${opacity};0" begin="${(40000 - age) / 1000}s" dur="20s" fill="freeze"/></path>`;
-      if (index === recentRoute.length - 1) body += `<circle cx="${end.x}" cy="${end.y}" r="2.4" fill="var(--trail)" opacity=".85"><animate attributeName="opacity" values=".85;0" begin="${(40000 - age) / 1000}s" dur="20s" fill="freeze"/></circle>`;
-    }
-    for (const call of all.slice(-20)) {
-      const p = point(call.station);
-      const from = edge(core, p, CORE + 8), to = edge(p, core, NODE);
-      const age = now - call.startedAt;
-      if (age < 1600) body += `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="${call.status === "failed" ? "var(--red)" : "var(--accent)"}" stroke-width="1.4" opacity=".75"><animate attributeName="opacity" values=".75;0" begin="${-age / 1000}s" dur="1.6s" fill="freeze"/></line>`;
-      if (age < 1250) body += pulse(from, to, "var(--hot)", age);
-      if (call.endedAt && now - call.endedAt < 1250) body += pulse(to, from, call.status === "failed" ? "var(--red)" : "var(--ash)", now - call.endedAt);
-    }
-    for (const state of states) {
-      const { station, p, own, running, failed, latestAge, alarm, lit } = state;
-      const classes = ["station", running.length ? "active" : "", lit ? "recent" : "", alarm ? "error" : "", selected === station.id ? "selected" : ""].filter(Boolean).join(" ");
-      let cooling = "";
-      if (lit || alarm) {
-        const span = alarm ? 6000 : 3200;
-        cooling = `<circle class="station-ring" cx="0" cy="0" r="${NODE}" style="opacity:1"><animate attributeName="opacity" values="1;0" begin="${-latestAge / 1000}s" dur="${span / 1000}s" fill="freeze"/></circle>`;
-      }
-      const rim = `paint-order="stroke" stroke="var(--ground)" stroke-width="4" stroke-linejoin="round"`;
-      const above = p.y < CY;
-      const labelY = above ? -NODE - 20 : NODE + 16;
-      const countY = above ? -NODE - 7 : NODE + 30;
-      body += `<g class="${classes}" data-station="${station.id}" transform="translate(${p.x} ${p.y})"><circle class="node" r="${NODE}"/>${cooling}${running.length ? `<circle class="station-ring" r="${NODE + 4}" style="opacity:.85"/><circle class="clock" r="${NODE + 5}" pathLength="1"/>` : ""}<path class="glyph" d="${station.icon}"/><text class="station-label" y="${labelY}" ${rim} fill="${lit || alarm ? "var(--bone)" : "var(--ash)"}">${station.label}</text>${own.length ? `<text class="station-count" y="${countY}" ${rim}>${own.length}</text>` : ""}${running.length > 1 ? `<circle class="badge" cx="16" cy="-16" r="8"/><text class="badge-text" x="16" y="-13">×${running.length}</text>` : ""}${failed ? `<circle class="error-badge" cx="-16" cy="-16" r="7.5"/><text class="error-badge-text" x="-16" y="-13">${Math.min(failed, 99)}</text>` : ""}</g>`;
-    }
-    const busy = all.some(call => call.status === "in_progress");
-    body += `<circle class="core-halo" cx="${CX}" cy="${CY}" r="${CORE + 9}"/><circle class="core ${busy ? "busy" : ""}" cx="${CX}" cy="${CY}" r="${CORE}"/><text class="core-name" x="${CX}" y="${CY + 2}">KIMI</text><text class="core-subtitle" x="${CX}" y="${CY + 18}">CODE</text>`;
-    map.innerHTML = body;
-    map.querySelectorAll(".station").forEach(node => node.addEventListener("click", () => showDetails(node.dataset.station)));
-    document.getElementById("summary").textContent = `${all.length} действий`;
-    const running = all.filter(call => call.status === "in_progress");
-    nowLine.textContent = running.length ? `Сейчас: ${stations.find(s => s.id === running[running.length - 1].station).label}: ${labelOf(running[running.length - 1].tool)}` : all.length ? `Последнее: ${labelOf(all[all.length - 1].tool)}` : "Ожидание вызовов инструментов";
-  }
-  function renderFeed() {
-    const all = [...calls.values()];
-    feed.innerHTML = all.slice(-12).reverse().map(call => {
-      const status = call.status === "in_progress" ? "running" : call.status === "failed" ? "ошибка" : "готово";
-      const stateClass = call.status === "in_progress" ? "running" : call.status === "failed" ? "failed" : "";
-      return `<div class="row ${stateClass}"><span class="dot">${call.status === "in_progress" ? "●" : call.status === "failed" ? "×" : "·"}</span><span class="row-station">${stations.find(s => s.id === call.station).label}</span><button class="row-button row-label" data-call="${esc(call.id)}" title="${esc(labelOf(call.tool))}">${esc(labelOf(call.tool))}</button><span class="row-status">${status}</span></div>`;
-    }).join("");
-    feed.querySelectorAll("[data-call]").forEach(button => button.addEventListener("click", () => {
-      const call = calls.get(button.dataset.call);
-      if (call?.path) send("file.open", { path: call.path });
-      else if (call?.url) send("link.open", { url: call.url });
-      else if (call) showDetails(call.station);
-    }));
-  }
-  function showDetails(stationId) {
-    selected = stationId;
-    const station = stations.find(item => item.id === stationId);
-    const own = [...calls.values()].filter(call => call.station === stationId);
-    document.getElementById("details-title").textContent = `${station.label} · ${own.length}`;
-    const grouped = new Map();
-    for (const call of own) {
-      const key = call.path || call.url || labelOf(call.tool);
-      const label = call.path ? shortPath(call.path) : call.url ? hostOf(call.url) : labelOf(call.tool);
-      const item = grouped.get(key) || { label, count: 0, path: call.path, url: call.url };
-      item.count++;
-      grouped.set(key, item);
-    }
-    document.getElementById("details-list").innerHTML = grouped.size ? [...grouped.values()].reverse().map(item => `<button class="detail ${item.path || item.url ? "clickable" : ""}" data-key="${esc(item.path || item.url || "")}" ${item.path || item.url ? "" : "disabled"}><span class="file-label" title="${esc(item.label)}">${esc(item.label)}</span><span class="detail-count">${item.count} обращ.</span></button>`).join("") : `<div class="empty">В этой категории пока нет действий</div>`;
-    document.querySelectorAll(".detail.clickable").forEach(button => button.addEventListener("click", () => {
-      const key = button.dataset.key;
-      if (key.startsWith("http")) send("link.open", { url: key });
-      else send("file.open", { path: key });
-    }));
-    details.hidden = false;
-    renderMap();
-  }
-  function send(type, payload = {}) {
-    window.AiExplorerHost?.send(JSON.stringify({ type, ...payload }));
-  }
-  function render() { renderMap(); renderFeed(); if (selected && !details.hidden) showDetails(selected); }
-  window.AiExplorer = {
-    receive(event) {
-      if (event.type === "theme") {
-        document.documentElement.dataset.theme = event.dark ? "dark" : "light";
-        return;
-      }
-      if (event.type === "history.loading") {
-        calls.clear();
-        selected = null;
-        details.hidden = true;
-        render();
-        return;
-      }
-      if (event.type !== "tool.updated") return;
-      const update = event.update || {};
-      if (!update.toolCallId) return;
-      const previous = calls.get(update.toolCallId);
-      const tool = { ...previous?.tool, ...update };
-      const now = Date.now();
-      const call = {
-        id: update.toolCallId,
-        tool,
-        station: previous?.station || stationOf(tool),
-        path: pathOf(tool),
-        url: urlOf(tool),
-        status: update.status || previous?.status || "in_progress",
-        startedAt: previous?.startedAt || now,
-        endedAt: update.status && update.status !== "in_progress" ? now : previous?.endedAt
-      };
-      calls.set(call.id, call);
-      render();
-    }
-  };
-  function applyZoom() {
-    const width = W / zoom, height = H / zoom;
-    map.setAttribute("viewBox", `${CX - width / 2} ${CY - height / 2} ${width} ${height}`);
-  }
-  document.getElementById("zoom-in").addEventListener("click", () => { zoom = Math.min(1.8, zoom + .15); applyZoom(); });
-  document.getElementById("zoom-out").addEventListener("click", () => { zoom = Math.max(.7, zoom - .15); applyZoom(); });
-  document.getElementById("zoom-fit").addEventListener("click", () => { zoom = 1; applyZoom(); details.hidden = true; selected = null; renderMap(); });
-  document.getElementById("details-close").addEventListener("click", () => { details.hidden = true; selected = null; renderMap(); });
-  window.AiExplorerHost = window.AiExplorerHost || { send() {} };
-  render();
-  send("ui.ready");
-</script>
-</body>
-</html>
+const sources=[{id:"project",title:"Файлы",color:"#d8b36c"},{id:"shell",title:"Терминал",color:"#82aaca"},{id:"docs",title:"Документация",color:"#b5a0ce"},{id:"internet",title:"Сеть",color:"#78b6a8"},{id:"config",title:"Конфигурация",color:"#a2a6ae"},{id:"skills",title:"Скиллы",color:"#b59bd1"},{id:"agents",title:"Субагенты",color:"#bcc58a"}];
+const results=[{id:"reads",title:"Чтения"},{id:"writes",title:"Правки"},{id:"commands",title:"Команды"},{id:"errors",title:"Ошибки"}];
+const gradients={project:["#e3bd76","#c99a58"],shell:["#91b7d5","#718fc4"],docs:["#c2acd8","#967cc4"],internet:["#86c5b5","#5aa9a0"],config:["#afb4bd","#838b9d"],skills:["#c7a5df","#d09bc3"],agents:["#ccd79a","#a5b86f"],reads:["#88c9b8","#5fa99d"],writes:["#e3bd76","#d69a64"],commands:["#91b7d5","#7799cc"],errors:["#ed8974","#d95c66"]};
+const calls=new Map();let selected=null,detailKind="all",expandedEntry=null;
+const positions=new Map();try{Object.entries(JSON.parse(localStorage.getItem("ai-explorer-graph-positions")||"{}")).forEach(([id,p])=>positions.set(id,p));}catch{}
+let dragState=null,suppressClickUntil=0;
+function positionOf(id,fallback){return positions.get(id)||fallback;}
+function centerPosition(){return positionOf("center",{x:600,y:290});}
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const inputOf=tool=>tool.rawInput&&typeof tool.rawInput==="object"?tool.rawInput:{};
+const pathOf=tool=>{const i=inputOf(tool);for(const k of["path","filePath","file_path"])if(typeof i[k]==="string"&&i[k].trim())return i[k];return null;};
+const urlOf=tool=>{const i=inputOf(tool);for(const k of["url","uri","link","endpoint"])if(typeof i[k]==="string"&&i[k].startsWith("http"))return i[k];return null;};
+const isAgent=tool=>/^agent/i.test((tool.title||"").trim())||"subagent_type"in inputOf(tool);
+const isSkill=path=>{const v=(path||"").toLowerCase();return v.includes("/.kimi-code/skills/")||v.includes("/.claude/skills/")||v.includes("/.agents/skills/")||v.endsWith("/skill.md");};
+function stationOf(tool){if(/^skill$/i.test((tool.title||"").trim())||"skill"in inputOf(tool))return"skills";if(urlOf(tool))return"internet";const p=pathOf(tool);if(p){if(isSkill(p))return"skills";const ext=p.split(".").pop().toLowerCase(),name=p.split("/").pop().toLowerCase();if(["md","mdx"].includes(ext))return"docs";if(["json","yml","yaml","toml","properties","xml","lock"].includes(ext)||[".gitignore",".editorconfig","dockerfile"].includes(name))return"config";return"project";}if(isAgent(tool))return"agents";if("command"in inputOf(tool)||/bash|shell|command/i.test(tool.title||""))return"shell";return"project";}
+function outcomeOf(call){if(call.status==="failed")return"errors";if(call.station==="shell")return"commands";return["edit","write"].includes(call.tool.kind)?"writes":"reads";}
+function detailLabel(call){const command=call.tool.rawInput?.command;return call.station==="shell"&&typeof command==="string"?command:labelOf(call.tool);}
+const shortPath=p=>p.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+const hostOf=u=>{try{return new URL(u).host;}catch{return"Сетевой запрос";}};
+const commandName=c=>{const first=String(c).trim().split(/\s+/)[0]||"shell";return first.split(/[\\/]/).pop().slice(0,50);};
+function labelOf(tool){const i=inputOf(tool);if(typeof i.skill==="string"&&i.skill.trim())return i.skill.trim();const p=pathOf(tool);if(p)return shortPath(p);const u=urlOf(tool);if(u)return hostOf(u);if(typeof i.command==="string")return commandName(i.command);return i.description||tool.title||"Инструмент";}
+function matchingCalls(){const all=[...calls.values()];if(!selected)return all;if(selected.type==="source")return all.filter(c=>c.station===selected.id);return all.filter(c=>outcomeOf(c)===selected.id);}
+function allowedSource(id){if(!selected)return true;if(selected.type==="source")return selected.id===id;return matchingCalls().some(c=>c.station===id);}
+function allowedResult(id){if(!selected)return true;if(selected.type==="result")return selected.id===id;return matchingCalls().some(c=>outcomeOf(c)===id);}
+function countLabel(n){return `${n} ${n===1?"действие":"действий"} за сессию`;}
+function cardAnchor(pos,height,center){const dx=pos.x+110-center.x,dy=pos.y+height/2-center.y;if(Math.abs(dy)>Math.abs(dx)*.65)return{x:pos.x+110,y:pos.y+(dy>0?0:height),angle:dy>0?-Math.PI/2:Math.PI/2,radial:true};return{x:pos.x+(dx<0?220:0),y:pos.y+height/2,angle:dx<0?0:Math.PI,radial:true};}
+function radialPoint(angle){const center=centerPosition();return{x:center.x+42*Math.cos(angle),y:center.y+58*Math.sin(angle),angle};}
+function arcPoint(index,total){return radialPoint((220-index*64/Math.max(1,total-1))*Math.PI/180);}
+function allocateFlowAnchors(entries){const sorted=entries.map(entry=>({...entry,angle:(entry.angle%(Math.PI*2)+Math.PI*2)%(Math.PI*2)})).sort((a,b)=>a.angle-b.angle);for(let pass=0;pass<24;pass++){for(let i=0;i<sorted.length;i++){const current=sorted[i],next=sorted[(i+1)%sorted.length],gap=(next.angle-current.angle+Math.PI*2)%(Math.PI*2),minimum=(current.width+next.width)/140+.035;if(gap<minimum){const shift=(minimum-gap)/2;current.angle-=shift;next.angle+=shift;}}}return new Map(sorted.map(entry=>[entry.id,radialPoint(entry.angle)]));}
+function controls(a,b){const strength=Math.min(160,Math.hypot(b.x-a.x,b.y-a.y)*.38);const c1=a.radial?{x:a.x+Math.cos(a.angle)*strength,y:a.y+Math.sin(a.angle)*strength}:{x:a.x+(b.x-a.x)*.42,y:a.y};const c2=b.radial?{x:b.x-Math.cos(b.angle)*strength,y:b.y-Math.sin(b.angle)*strength}:{x:a.x+(b.x-a.x)*.72,y:b.y};return{c1,c2};}
+function curve(a,b){const{c1,c2}=controls(a,b);return`M${a.x} ${a.y}C${c1.x} ${c1.y},${c2.x} ${c2.y},${b.x} ${b.y}`;}
+function reverseCurve(a,b){const{c1,c2}=controls(a,b);return`M${b.x} ${b.y}C${c2.x} ${c2.y},${c1.x} ${c1.y},${a.x} ${a.y}`;}
+function ribbon(a,b,width){const{c1,c2}=controls(a,b),offset=(p,v)=>p.radial?{x:p.x-Math.sin(p.angle)*v,y:p.y+Math.cos(p.angle)*v}:{x:p.x,y:p.y+v};const a0=offset(a,-width/2),a1=offset(a,width/2),b0=offset(b,-width/2),b1=offset(b,width/2),c10=offset(c1,-width/2),c11=offset(c1,width/2),c20=offset(c2,-width/2),c21=offset(c2,width/2);return`M${a0.x} ${a0.y}C${c10.x} ${c10.y},${c20.x} ${c20.y},${b0.x} ${b0.y}L${b1.x} ${b1.y}C${c21.x} ${c21.y},${c11.x} ${c11.y},${a1.x} ${a1.y}Z`;}
+function flowWidth(count){return Math.min(52,3+count*.2);}
+function cardLayout(items,counts,right=false){let y=right?80:55;return items.map((item,index)=>{const n=counts(item),ratio=n/Math.max(1,...items.map(counts)),height=n===0?42:ratio>.3?(right?112:126):ratio>.14?(right?88:94):42;const card={item,index,n,y,height};y+=height+(height>50?22:10);return card;});}
+function render(){
+ const all=[...calls.values()],filtered=matchingCalls(),now=Date.now(),resultColors={reads:"#78b6a8",writes:"#d8b36c",commands:"#82aaca",errors:"#e8654f"};
+ const left=cardLayout(sources,s=>all.filter(c=>c.station===s.id).length),right=cardLayout(results,r=>all.filter(c=>outcomeOf(c)===r.id).length,true),center=centerPosition();
+ const flowEntries=[...left.map(({item,index,n,y,height})=>{const pos=positionOf(item.id,{x:20,y}),anchor=cardAnchor(pos,height,center);return{id:item.id,angle:Math.atan2(anchor.y-center.y,anchor.x-center.x),width:flowWidth(n)};}),...right.map(({item,n,y,height})=>{const pos=positionOf(item.id,{x:960,y}),anchor=cardAnchor(pos,height,center);return{id:item.id,angle:Math.atan2(anchor.y-center.y,anchor.x-center.x),width:flowWidth(n)};})],flowAnchors=allocateFlowAnchors(flowEntries);let body=`<rect width="1200" height="600" fill="var(--bg)"/><defs><linearGradient id="comet" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".32" stop-color="#fff" stop-opacity=".08"/><stop offset=".5" stop-color="#fff" stop-opacity=".65"/><stop offset=".68" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>${Object.entries(gradients).map(([id,pair])=>`<linearGradient id="flow-${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${pair[0]}"/><stop offset="1" stop-color="${pair[1]}"/></linearGradient>`).join("")}</defs><text x="20" y="27" fill="var(--faint)" font-size="10" letter-spacing="2">ИСТОЧНИКИ</text><text x="960" y="27" fill="var(--faint)" font-size="10" letter-spacing="2">РЕЗУЛЬТАТ</text>`;
+ left.forEach(({item:s,index:i,n,y,height})=>{const cardPos=positionOf(s.id,{x:20,y}),center=centerPosition(),active=!selected||selected.type==="source"&&selected.id===s.id||selected.type==="result"&&matchingCalls().some(c=>c.station===s.id),a=cardAnchor(cardPos,height,center),b={...flowAnchors.get(s.id),radial:true},width=flowWidth(n);if(n)body+=`<path class="ribbon" d="${curve(a,b)}" fill="none" stroke-linecap="butt" stroke="url(#flow-${s.id})" stroke-width="${width}" opacity="${active?.62:.06}"/>`;const latest=Math.max(0,...all.filter(c=>c.station===s.id).map(c=>c.startedAt)),age=now-latest,duration=700*(.9+(i%3)*.05);if(age<1400){body+=`<rect class="pulse" opacity="0" data-age="${age}" data-duration="${duration}" data-width="${width}" data-motion="${reverseCurve(a,b)}" x="-144" y="${-width/2}" width="288" height="${width}" fill="url(#comet)" filter="blur(2.5px)"/>`;}});
+ right.forEach(({item:r,index:i,n,y,height})=>{const cardPos=positionOf(r.id,{x:960,y}),center=centerPosition(),angle=Math.atan2(cardPos.y+height/2-center.y,cardPos.x+110-center.x),active=!selected||selected.type==="result"&&selected.id===r.id||selected.type==="source"&&matchingCalls().some(c=>outcomeOf(c)===r.id),a={...flowAnchors.get(r.id),radial:true},b=cardAnchor(cardPos,height,center),width=flowWidth(n);if(n)body+=`<path class="ribbon" d="${curve(a,b)}" fill="none" stroke-linecap="butt" stroke="url(#flow-${r.id})" stroke-width="${width}" opacity="${active?.62:.06}"/>`;const latest=Math.max(0,...all.filter(c=>outcomeOf(c)===r.id).map(c=>c.startedAt)),age=now-latest,duration=700*(.9+(i%3)*.05);if(age<1400){body+=`<rect class="pulse" opacity="0" data-age="${age}" data-duration="${duration}" data-width="${width}" data-motion="${curve(a,b)}" x="-144" y="${-width/2}" width="288" height="${width}" fill="url(#comet)" filter="blur(2.5px)"/>`;}});
+ left.forEach(({item:s,n,y,height})=>{const cardPos=positionOf(s.id,{x:20,y}),enabled=allowedSource(s.id),arrival=now-Math.max(0,...all.filter(c=>c.station===s.id).map(c=>c.startedAt)),compact=height<50,pct=all.length?Math.round(n/all.length*100):0;body+=`<g class="source ${enabled?"active":"muted"} ${compact?"compact":""} ${selected?.type==="source"&&selected.id===s.id?"selected":""}" data-source="${s.id}" ${arrival<1400?`data-arrival="${arrival}"`:""} transform="translate(${cardPos.x} ${cardPos.y})"><rect class="card" width="220" height="${height}" rx="9"/><circle class="card-dot" cx="18" cy="${compact?21:27}" r="4" fill="${s.color}"/><text class="card-title" x="32" y="${compact?25:32}">${s.title}</text>${compact?`<text class="card-count" x="204" y="25">${enabled?n:"—"}</text>`:`<text class="card-count" x="16" y="72">${enabled?n:"—"}</text><text class="card-note" x="17" y="${height-15}">${pct}% сессии</text>`}</g>`;});
+ const notes={reads:"файлы, документация, сеть",writes:"изменённых файлов",commands:"выполнено в терминале",errors:"завершились с ошибкой"};right.forEach(({item:r,n,y,height})=>{const cardPos=positionOf(r.id,{x:960,y}),enabled=allowedResult(r.id),arrival=now-Math.max(0,...all.filter(c=>outcomeOf(c)===r.id).map(c=>c.startedAt)),compact=height<50;body+=`<g class="result ${enabled?"active":"muted"} ${compact?"compact":""} ${selected?.type==="result"&&selected.id===r.id?"selected":""}" data-result="${r.id}" ${arrival<1400?`data-arrival="${arrival}"`:""} transform="translate(${cardPos.x} ${cardPos.y})"><rect class="card" width="220" height="${height}" rx="9"/><circle class="card-dot" cx="18" cy="${compact?21:25}" r="4" fill="${resultColors[r.id]}"/><text class="card-title" x="31" y="${compact?25:30}">${r.title}</text>${compact?`<text class="card-count" x="204" y="25">${enabled?n:"—"}</text>`:`<text class="card-count" x="16" y="69">${enabled?n:"—"}</text><text class="card-note" x="17" y="${height-14}">${notes[r.id]}</text>`}</g>`;});
+ body+=`<g class="center-node" data-center="true"><circle class="center" cx="${center.x}" cy="${center.y}" r="70"/><text class="center-kimi" x="${center.x}" y="${center.y-16}">KIMI</text><text class="center-number" x="${center.x}" y="${center.y+20}">${filtered.length}</text><text class="center-label" x="${center.x}" y="${center.y+43}">действий</text></g>`;
+ document.getElementById("map").innerHTML=body;document.getElementById("summary").textContent=selected?`Фильтр: ${titleOf(selected)}`:countLabel(all.length);
+ document.querySelectorAll(".pulse").forEach(ray=>{const path=document.createElementNS("http://www.w3.org/2000/svg","path");path.setAttribute("d",ray.dataset.motion);const length=path.getTotalLength(),initialAge=Number(ray.dataset.age),duration=Number(ray.dataset.duration),started=performance.now();function move(now){const progress=(initialAge+now-started)/duration;if(progress>=1){ray.setAttribute("opacity","0");return;}const distance=Math.max(0,progress)*length,point=path.getPointAtLength(distance),next=path.getPointAtLength(Math.min(length,distance+1));const angle=Math.atan2(next.y-point.y,next.x-point.x)*180/Math.PI;ray.setAttribute("x",point.x-144);ray.setAttribute("y",point.y-Number(ray.dataset.width)/2);ray.setAttribute("transform",`rotate(${angle} ${point.x} ${point.y})`);ray.setAttribute("opacity",String(Math.max(0,Math.sin(progress*Math.PI))*.6));requestAnimationFrame(move);}requestAnimationFrame(move);});
+ document.querySelectorAll("[data-arrival]").forEach(card=>card.animate([{filter:"brightness(1)"},{filter:"brightness(1.65)"},{filter:"brightness(1)"}],{duration:550,delay:Math.max(0,625-Number(card.dataset.arrival)),fill:"none"}));
+ document.querySelectorAll("[data-source]").forEach(n=>n.addEventListener("click",()=>choose("source",n.dataset.source)));document.querySelectorAll("[data-result]").forEach(n=>n.addEventListener("click",()=>choose("result",n.dataset.result)));
+}
+function svgPoint(event){const svg=document.getElementById("map"),point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;return point.matrixTransform(svg.getScreenCTM().inverse());}
+document.getElementById("map").addEventListener("pointerdown",event=>{const node=event.target.closest(".source,.result,.center-node");if(!node||event.button!==0)return;const type=node.hasAttribute("data-center")?"center":node.hasAttribute("data-source")?"source":"result",id=type==="center"?"center":node.dataset[type];const transform=node.transform?.baseVal.consolidate()?.matrix,fallback=type==="center"?{x:600,y:290}:{x:transform?.e??20,y:transform?.f??0},current=positionOf(id,fallback),point=svgPoint(event);dragState={id,current,dx:point.x-current.x,dy:point.y-current.y,startX:event.clientX,startY:event.clientY,moved:false};node.classList.add("dragging");event.preventDefault();});
+document.getElementById("map").addEventListener("pointermove",event=>{if(!dragState)return;const point=svgPoint(event);if(Math.hypot(event.clientX-dragState.startX,event.clientY-dragState.startY)>3)dragState.moved=true;if(!dragState.moved)return;positions.set(dragState.id,{x:point.x-dragState.dx,y:point.y-dragState.dy});render();});
+document.getElementById("map").addEventListener("pointerup",()=>{if(!dragState)return;if(dragState.moved){suppressClickUntil=Date.now()+250;localStorage.setItem("ai-explorer-graph-positions",JSON.stringify(Object.fromEntries(positions)));}dragState=null;});
+function titleOf(value){return(value.type==="source"?sources:results).find(x=>x.id===value.id)?.title||"";}
+function choose(type,id){if(Date.now()<suppressClickUntil)return;if(selected?.type===type&&selected.id===id)showDetails();else{selected={type,id};detailKind="all";document.getElementById("details").hidden=true;render();}}
+function showDetails(){if(!selected)return;expandedEntry=null;renderDetails();document.getElementById("details").hidden=false;}
+function detailCalls(){let own=matchingCalls();if(detailKind!=="all")own=own.filter(c=>outcomeOf(c)===detailKind);return own;}
+function renderDetails(){
+ const own=detailCalls(),groups=new Map();for(const call of own){const key=call.path||call.url||detailLabel(call),label=call.path?shortPath(call.path):call.url?hostOf(call.url):detailLabel(call);const item=groups.get(key)||{key,label,path:call.path,url:call.url,calls:[]};item.calls.push(call);groups.set(key,item);}
+ document.getElementById("details-title").textContent=titleOf(selected);document.getElementById("details-summary").textContent=countLabel(own.length);
+ const chips=[{id:"all",title:"Все"},{id:"reads",title:"Чтения"},{id:"writes",title:"Правки"},{id:"commands",title:"Команды"},{id:"errors",title:"Ошибки"}];document.getElementById("chips").innerHTML=chips.map(c=>`<button class="chip ${detailKind===c.id?"active":""}" data-kind="${c.id}">${c.title}</button>`).join("");
+ document.querySelectorAll("[data-kind]").forEach(b=>b.addEventListener("click",()=>{detailKind=b.dataset.kind;expandedEntry=null;renderDetails();}));
+ const items=[...groups.values()].sort((a,b)=>(b.calls.at(-1)?.startedAt||0)-(a.calls.at(-1)?.startedAt||0));if(expandedEntry===null&&items.length)expandedEntry=items[0].key;
+ document.getElementById("entries").innerHTML=items.length?items.map(item=>`<button class="entry" data-entry="${esc(item.key)}"><span class="entry-title" title="${esc(item.key)}">${esc(item.label)}</span><span class="entry-count">${item.calls.length}</span><span class="entry-time">${time(item.calls.at(-1)?.startedAt)}</span></button>${expandedEntry===item.key?`<div class="history">${item.path||item.url?`<button class="chip" data-open="${esc(item.path||item.url)}">Открыть ${item.path?"файл":"сайт"}</button>`:""}${item.calls.slice().reverse().map(call=>`<div class="history-row"><span>${time(call.startedAt)}</span><span>${esc(call.station==="shell"&&call.tool.rawInput?.command?call.tool.rawInput.command:labelOf(call.tool))}</span><span>${duration(call)}</span></div>`).join("")}</div>`:""}`).join(""):`<div class="empty">Нет действий для этого фильтра</div>`;
+ document.querySelectorAll("[data-entry]").forEach(b=>b.addEventListener("click",()=>{expandedEntry=expandedEntry===b.dataset.entry?null:b.dataset.entry;renderDetails();}));
+ document.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{const value=b.dataset.open;send(value.startsWith("http")?"link.open":"file.open",value.startsWith("http")?{url:value}:{path:value});}));
+}
+function time(value){return value?new Date(value).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—";}
+function duration(call){if(!call.endedAt)return"…";const ms=Math.max(0,call.endedAt-call.startedAt);return ms<1000?`${ms} мс`:`${(ms/1000).toFixed(1)} с`;}
+function send(type,payload={}){window.AiExplorerHost?.send(JSON.stringify({type,...payload}));}
+document.getElementById("reset").addEventListener("click",()=>{selected=null;document.getElementById("details").hidden=true;render();});
+document.getElementById("map").addEventListener("click",event=>{if(!event.target.closest(".source,.result")){selected=null;document.getElementById("details").hidden=true;render();}});
+document.getElementById("details-close").addEventListener("click",()=>document.getElementById("details").hidden=true);
+window.AiExplorer={receive(event){if(event.type==="theme")document.documentElement.dataset.theme=event.dark?"dark":"light";if(event.type==="history.loading"){calls.clear();selected=null;document.getElementById("details").hidden=true;render();return;}if(event.type!=="tool.updated")return;const u=event.update||{};if(!u.toolCallId)return;const previous=calls.get(u.toolCallId),tool={...previous?.tool,...u},now=Date.now();calls.set(u.toolCallId,{id:u.toolCallId,tool,station:previous?.station||stationOf(tool),path:pathOf(tool),url:urlOf(tool),status:u.status||previous?.status||"in_progress",startedAt:previous?.startedAt||now,endedAt:u.status&&u.status!=="in_progress"?now:previous?.endedAt});render();if(!document.getElementById("details").hidden)renderDetails();}};
+window.AiExplorerHost=window.AiExplorerHost||{send(){}};render();send("ui.ready");
+</script></body></html>

@@ -77,7 +77,12 @@ internal class KimiResourcePanel(
     }
 
     private fun createWebFile(): Path {
-        val html = javaClass.getResourceAsStream("/web/resources.html")?.bufferedReader()?.use { it.readText() }
+        val resource = when (kind) {
+            "skills" -> "/web/skills.html"
+            "mcp" -> "/web/mcp.html"
+            else -> "/web/resources.html"
+        }
+        val html = javaClass.getResourceAsStream(resource)?.bufferedReader()?.use { it.readText() }
             ?: error("AI Explorer resource browser is missing")
         val script = """
             <script>
@@ -96,14 +101,21 @@ internal class KimiResourcePanel(
     private fun handleCommand(message: String) {
         onEdt {
             try {
-                when (JsonParser.parseString(message).asJsonObject.get("type")?.asString) {
+                val command = JsonParser.parseString(message).asJsonObject
+                when (command.get("type")?.asString) {
                     "ui.ready" -> {
                         ready = true
                         post("theme") { addProperty("dark", UIUtil.isUnderDarcula()) }
                         refreshResources()
                     }
                     "resources.refresh" -> refreshResources()
-                    "file.open" -> openFile(JsonParser.parseString(message).asJsonObject.get("path").asString)
+                    "file.open" -> openFile(command.get("path").asString)
+                    "mcp.save" -> mutateMcp(command.get("oldName")?.asString, "Сохранено. Настройки применятся в новой сессии Kimi") {
+                        store.saveMcp(command)
+                    }
+                    "mcp.delete" -> mutateMcp(null, "Сервер удалён") {
+                        store.deleteMcp(command.get("scope").asString, command.get("name").asString)
+                    }
                 }
             } catch (e: Exception) {
                 log.warn("Invalid AI Explorer resource command", e)
@@ -126,6 +138,24 @@ internal class KimiResourcePanel(
             } finally {
                 refreshing.set(false)
                 if (refreshAgain) onEdt { refreshResources() }
+            }
+        }
+    }
+
+    private fun mutateMcp(serverId: String?, success: String, action: () -> Unit) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val message = try {
+                action()
+                success
+            } catch (e: Exception) {
+                log.warn("Cannot update MCP configuration", e)
+                "Ошибка: ${e.message ?: "не удалось сохранить"}"
+            }
+            onEdt {
+                post("mcp.result") {
+                    serverId?.let { addProperty("serverId", it) }
+                    addProperty("message", message)
+                }
             }
         }
     }

@@ -11,7 +11,7 @@
     button,input { font:inherit } button { color:inherit } .app { display:flex;flex-direction:column;height:100% }
     .brand { height:58px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 14px;font-weight:650 }.brand span { flex:1 }.brand button,.refresh { border:0;background:transparent;color:var(--secondary);cursor:pointer;padding:7px }.brand button:hover { color:var(--text) }
     .search { margin:4px 12px 12px;height:35px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:3px;background:var(--bg) }.search input { width:100%;min-width:0;border:0;outline:0;color:var(--text);background:transparent }.search input::placeholder { color:var(--faint) }
-    .tree { flex:1;min-height:0;overflow:auto;padding:0 7px 12px }.node { margin:1px 0 }.node-row { width:100%;min-height:39px;display:flex;align-items:flex-start;gap:7px;padding:7px 8px;border:1px solid transparent;border-radius:3px;background:transparent;text-align:left;cursor:pointer }.node-row:hover { background:var(--hover) }.node-row.file:hover { border-color:var(--strong) }.twisty { width:12px;flex-shrink:0;color:var(--faint);line-height:18px }.node-copy { min-width:0;flex:1 }.node-title { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:18px }.node-subtitle { display:block;margin-top:3px;color:var(--faint);font-size:10px;line-height:1.45;white-space:normal;overflow-wrap:anywhere }.scope { flex-shrink:0;color:var(--faint);font-size:8px;text-transform:uppercase;margin-top:3px }.children { margin-left:13px;border-left:1px solid var(--border);padding-left:5px }.children[hidden] { display:none }.empty { padding:42px 18px;text-align:center;color:var(--faint);line-height:1.6 }.footer { flex-shrink:0;padding:10px 16px;border-top:1px solid var(--border);color:var(--faint);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+    .tree { flex:1;min-height:0;overflow:auto;padding:0 7px 12px }.node { margin:1px 0 }.node-row { width:100%;min-height:39px;display:flex;align-items:flex-start;gap:7px;padding:7px 8px;border:1px solid transparent;border-radius:3px;background:transparent;text-align:left;cursor:pointer }.node-row:hover { background:var(--hover) }.node-row.file:hover,.node-row.file.selected { border-color:var(--strong);background:var(--hover) }.node-row.file.selected .node-title { color:var(--accent) }.twisty { width:12px;flex-shrink:0;color:var(--faint);line-height:18px }.node-copy { min-width:0;flex:1 }.node-title { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:18px }.node-subtitle { display:block;margin-top:3px;color:var(--faint);font-size:10px;line-height:1.45;white-space:normal;overflow-wrap:anywhere }.scope { flex-shrink:0;color:var(--faint);font-size:8px;text-transform:uppercase;margin-top:3px }.children { margin-left:13px;border-left:1px solid var(--border);padding-left:5px }.children[hidden] { display:none }.empty { padding:42px 18px;text-align:center;color:var(--faint);line-height:1.6 }.footer { flex-shrink:0;padding:10px 16px;border-top:1px solid var(--border);color:var(--faint);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
     ::-webkit-scrollbar { width:10px } ::-webkit-scrollbar-thumb { background:#55575c;border:3px solid transparent;border-radius:5px;background-clip:padding-box }
   </style>
 </head>
@@ -27,6 +27,7 @@
   const titles = { skills:["Скиллы","Поиск скиллов и файлов"], settings:["Настройки","Поиск инструкций и настроек"], mcp:["MCP","Поиск MCP-серверов"] };
   const scopeNames = { global:"global", project:"project", extra:"extra" };
   let nodes = [];
+  let selectedPath = null;
   const collapsed = new Set();
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
   document.getElementById("title").textContent = titles[kind][0];
@@ -45,14 +46,18 @@
     const key = esc(path);
     const identity = node.path || `${kind}/${node.scope||"group"}/${node.title}`;
     const open = expanded || !collapsed.has(identity) ? "" : "hidden";
-    return `<div class="node"><button class="node-row ${node.path?"file":""}" data-node="${key}"><span class="twisty">${children.length?(open?"▾":"▸"):node.path?"·":""}</span><span class="node-copy"><span class="node-title" title="${esc(node.path||node.title)}">${esc(node.title)}</span>${node.subtitle?`<span class="node-subtitle">${esc(node.subtitle)}</span>`:""}</span>${node.scope?`<span class="scope">${scopeNames[node.scope]||esc(node.scope)}</span>`:""}</button>${children.length?`<div class="children" id="children-${key}" ${open}>${children.map((child,index)=>nodeHtml(child,`${path}.${index}`,expanded)).join("")}</div>`:""}</div>`;
+    return `<div class="node"><button class="node-row ${node.path?"file":""} ${node.path===selectedPath?"selected":""}" data-node="${key}"><span class="twisty">${children.length?(open?"▾":"▸"):node.path?"·":""}</span><span class="node-copy"><span class="node-title" title="${esc(node.path||node.title)}">${esc(node.title)}</span>${node.subtitle?`<span class="node-subtitle">${esc(node.subtitle)}</span>`:""}</span>${node.scope?`<span class="scope">${scopeNames[node.scope]||esc(node.scope)}</span>`:""}</button>${children.length?`<div class="children" id="children-${key}" ${open}>${children.map((child,index)=>nodeHtml(child,`${path}.${index}`,expanded)).join("")}</div>`:""}</div>`;
   }
   function bind() {
     document.querySelectorAll("[data-node]").forEach(button=>button.addEventListener("click",()=>{
       const parts=button.dataset.node.split(".").map(Number); let list=filtered(nodes,document.getElementById("search").value.trim().toLowerCase()),node;
       for (const part of parts) { node=list[part]; list=node.children||[]; }
       const childBox=document.getElementById(`children-${button.dataset.node}`);
-      if (node.path && node.kind !== "directory") send("file.open",{path:node.path});
+      if (node.path && node.kind !== "directory") {
+        selectedPath=node.path;
+        send("file.open",{path:node.path});
+        document.getElementById("footer").textContent=kind==="settings"?`${node.subtitle||"Инструкция"} → ${node.title}`:node.path;
+      }
       if (childBox) {
         childBox.hidden=!childBox.hidden;
         const identity=node.path||`${kind}/${node.scope||"group"}/${node.title}`;

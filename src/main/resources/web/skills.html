@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Explorer — Скиллы</title>
+  <style>
+    :root{color-scheme:dark;--bg:#1e1f22;--raised:#2b2d30;--hover:#313438;--text:#bcbec4;--secondary:#9da0a8;--faint:#6f737a;--border:#393b40;--strong:#4b4d52;--accent:#d68c67;--accent-bg:#35312e}
+    :root[data-theme=light]{color-scheme:light;--bg:#f7f8fa;--raised:#fff;--hover:#e9edf2;--text:#24262b;--secondary:#707681;--faint:#989ea8;--border:#e1e5ea;--strong:#d4d9e0;--accent:#9b5b37;--accent-bg:#eee5df}
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:var(--bg);color:var(--text);font:13px "JetBrains Mono","SFMono-Regular",Consolas,monospace}button,input{font:inherit}button{color:inherit;cursor:pointer}
+    .app{display:flex;flex-direction:column;height:100%}.brand{height:58px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 14px;font-weight:650}.brand span{flex:1}.icon{border:0;background:transparent;color:var(--secondary);padding:7px}.icon:hover{color:var(--text)}
+    .search{margin:4px 12px 10px;height:35px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--border);border-radius:3px}.search input{width:100%;min-width:0;border:0;outline:0;color:var(--text);background:transparent}.search input::placeholder{color:var(--faint)}
+    .filters{display:flex;gap:4px;padding:0 12px 10px;overflow:auto;flex-shrink:0}.filters button{padding:5px 8px;border:1px solid transparent;border-radius:3px;background:transparent;color:var(--secondary);font-size:10px;white-space:nowrap}.filters button.active{border-color:var(--strong);background:var(--raised);color:var(--text)}
+    .tree{flex:1;min-height:0;overflow:auto;padding:0 7px 12px}.node{margin:2px 0}.row{width:100%;display:flex;align-items:flex-start;gap:7px;padding:8px;border:1px solid transparent;border-radius:4px;background:transparent;text-align:left}.row:hover{background:var(--hover);border-color:var(--border)}.skill.open>.row{background:var(--accent-bg);border-color:var(--strong)}
+    .twisty{width:17px;flex-shrink:0;color:var(--secondary);font-size:13px;line-height:20px;text-align:center}.file-icon{width:17px;flex-shrink:0;color:var(--faint);line-height:20px;text-align:center}.copy{min-width:0;flex:1}.title{display:block;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.description{display:block;margin-top:3px;color:var(--secondary);font-size:10px;line-height:1.5;white-space:normal}.scope,.count{flex-shrink:0;color:var(--faint);font-size:8px;line-height:20px}.scope{text-transform:uppercase}.open>.row .title{color:var(--accent)}
+    .children{margin-left:15px;border-left:1px solid var(--border);padding-left:5px}.skill.open>.children{border-left-color:var(--accent)}.children[hidden]{display:none}.file .title{color:var(--secondary)}.file.selected{background:var(--hover);border-color:var(--strong)}.file.selected .title{color:var(--accent)}.folder.open>.row{background:var(--raised)}.folder.open>.row .twisty{color:var(--accent)}
+    .empty{padding:42px 18px;text-align:center;color:var(--faint);line-height:1.6}::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:#55575c;border:3px solid transparent;border-radius:5px;background-clip:padding-box}
+  </style>
+</head>
+<body><div class="app"><header class="brand"><span>Skills</span><button class="icon" id="refresh" title="Обновить">↻</button></header><label class="search"><input id="search" placeholder="Поиск скиллов" autocomplete="off"></label><div class="filters"><button data-scope="all">Все</button><button data-scope="project">Проект</button><button data-scope="global">Глобальные</button><button data-scope="extra">Дополнительные</button></div><div class="tree" id="tree"></div></div>
+<script>
+  let skills=[],scope="all",selectedPath=null;
+  const expanded=new Set(),collapsedFolders=new Set();
+  const scopeNames={global:"Глобальный",project:"Проект",extra:"Дополнительный"};
+  const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+  function send(type,payload={}){window.AiExplorerHost?.send(JSON.stringify({type,...payload}));}
+  function countFiles(nodes){return(nodes||[]).reduce((sum,node)=>sum+(node.children?countFiles(node.children):1),0);}
+  function visibleSkills(){const query=document.getElementById("search").value.trim().toLowerCase();return skills.filter(skill=>(scope==="all"||skill.scope===scope)&&`${skill.title} ${skill.subtitle||""}`.toLowerCase().includes(query));}
+  function skillHtml(skill,index){
+    const open=expanded.has(skill.path),children=[];
+    if(skill.files)children.push(...skill.files.filter(file=>file.path!==skill.path));
+    if(skill.links?.length)children.push({title:"Ссылки",kind:"directory",path:`${skill.path}#links`,children:skill.links});
+    return `<section class="node skill ${open?"open":""}"><button class="row" data-skill="${index}"><span class="twisty">${open?"▼":"▶"}</span><span class="copy"><span class="title">${esc(skill.title)}</span>${skill.subtitle?`<span class="description">${esc(skill.subtitle)}</span>`:""}</span><span class="scope">${scopeNames[skill.scope]||esc(skill.scope)}</span></button><div class="children" id="skill-${index}" ${open?"":"hidden"}><button class="row file ${selectedPath===skill.path?"selected":""}" data-file="${esc(skill.path)}"><span class="file-icon">▤</span><span class="copy"><span class="title">SKILL.md</span></span></button>${children.map((node,i)=>fileHtml(node,`${index}-${i}`)).join("")}</div></section>`;
+  }
+  function fileHtml(node,key){
+    const folder=node.kind==="directory",open=folder&&!collapsedFolders.has(node.path),children=node.children||[];
+    if(folder)return `<div class="node folder ${open?"open":""}"><button class="row" data-folder="${esc(node.path)}" data-box="${key}"><span class="twisty">${open?"▼":"▶"}</span><span class="copy"><span class="title">${esc(node.title)}</span></span><span class="count">${countFiles(children)}</span></button><div class="children" id="folder-${key}" ${open?"":"hidden"}>${children.map((child,index)=>fileHtml(child,`${key}-${index}`)).join("")}</div></div>`;
+    return `<button class="row file ${selectedPath===node.path?"selected":""}" data-file="${esc(node.path)}"><span class="file-icon">▤</span><span class="copy"><span class="title">${esc(node.title)}</span></span></button>`;
+  }
+  function render(){
+    const visible=visibleSkills();
+    document.getElementById("tree").innerHTML=visible.length?visible.map(skill=>skillHtml(skill,skills.indexOf(skill))).join(""):`<div class="empty">${document.getElementById("search").value?"Ничего не найдено":"Скиллы не найдены"}</div>`;
+    document.querySelectorAll("[data-skill]").forEach(button=>button.addEventListener("click",()=>{const skill=skills[Number(button.dataset.skill)];if(expanded.has(skill.path))expanded.delete(skill.path);else expanded.add(skill.path);render();}));
+    document.querySelectorAll("[data-folder]").forEach(button=>button.addEventListener("click",()=>{const path=button.dataset.folder;if(collapsedFolders.has(path))collapsedFolders.delete(path);else collapsedFolders.add(path);render();}));
+    document.querySelectorAll("[data-file]").forEach(button=>button.addEventListener("click",()=>{selectedPath=button.dataset.file;send("file.open",{path:selectedPath});render();}));
+  }
+  document.getElementById("search").addEventListener("input",render);
+  document.querySelectorAll("[data-scope]").forEach(button=>{button.classList.toggle("active",button.dataset.scope===scope);button.addEventListener("click",()=>{scope=button.dataset.scope;document.querySelectorAll("[data-scope]").forEach(item=>item.classList.toggle("active",item===button));render();});});
+  document.getElementById("refresh").addEventListener("click",()=>send("resources.refresh"));
+  window.AiExplorer={receive(event){if(event.type==="theme")document.documentElement.dataset.theme=event.dark?"dark":"light";if(event.type==="resources"){skills=event.nodes||[];render();}}};
+  window.AiExplorerHost=window.AiExplorerHost||{send(){}};render();send("ui.ready");
+</script></body></html>
