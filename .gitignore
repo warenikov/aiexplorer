@@ -1,0 +1,9 @@
+.gradle/
+.intellijPlatform/
+.kotlin/
+build/
+.idea/
+*.iml
+.DS_Store
+web/node_modules/
+*.tsbuildinfo

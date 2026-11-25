@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Explorer — карта активности</title>
+  <!--
+    Map visualization adapted from https://github.com/alexeyw/lot-map
+    Copyright (c) 2026 Aleksei Volodin
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+  -->
+  <style>
+    :root {
+      color-scheme: dark;
+      --ground: #0a0c11;
+      --raised: #12151c;
+      --line: #272c36;
+      --spoke: #1a1e27;
+      --bone: #ebe6dc;
+      --ash: #9ba1ab;
+      --dim: #6b7280;
+      --accent: #e1ac6e;
+      --hot: #f0c595;
+      --red: #e8654f;
+      --trail: #ebe6dd;
+      --memory: #62c7ba;
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --ground: #f5f2ea;
+      --raised: #ffffff;
+      --line: #cfc9bc;
+      --spoke: #e3ded2;
+      --bone: #1f2228;
+      --ash: #5f6570;
+      --dim: #8b909a;
+      --accent: #b8762a;
+      --hot: #8f560f;
+      --red: #c5402b;
+      --trail: #9c978b;
+      --memory: #1c8c81;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: var(--ground);
+      color: var(--bone);
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 12px;
+    }
+    button { font: inherit; }
+    .app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      padding: 6px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ash);
+    }
+    .title { color: var(--bone); font-size: 13px; font-weight: 600; }
+    .summary { margin-left: 10px; color: var(--dim); }
+    .zoom { display: flex; gap: 4px; }
+    .zoom button, .back {
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--raised);
+      color: var(--ash);
+      cursor: pointer;
+    }
+    .zoom button { width: 28px; height: 26px; }
+    .zoom button:hover, .back:hover { color: var(--hot); border-color: var(--accent); }
+    .map-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    svg { display: block; width: min(100%, 650px); height: 100%; max-height: 570px; }
+    .orbit { fill: none; stroke: var(--line); stroke-width: .7; opacity: .45; stroke-dasharray: 2 5; }
+    .spoke { stroke: var(--spoke); stroke-linecap: round; }
+    .spoke-worn { stroke: var(--accent); stroke-linecap: round; }
+    .route { fill: none; stroke: var(--trail); stroke-linecap: round; }
+    .station { cursor: pointer; }
+    .station .node { fill: var(--raised); stroke: var(--line); stroke-width: 1.2; transition: stroke .2s; }
+    .station:hover .node, .station.selected .node { stroke: var(--hot); }
+    .station .glyph { fill: none; stroke: var(--ash); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+    .station.active .glyph, .station.recent .glyph { stroke: var(--hot); }
+    .station.error .glyph { stroke: var(--red); }
+    .station-label { font-size: 11.5px; text-anchor: middle; }
+    .station-count { fill: var(--dim); font-size: 9.5px; text-anchor: middle; }
+    .station-halo { fill: var(--accent); opacity: 0; }
+    .station-ring { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: 0; }
+    .station.active .station-ring { opacity: .85; }
+    .station.error .station-ring { stroke: var(--red); }
+    .clock { fill: none; stroke: var(--hot); stroke-width: 2; stroke-dasharray: 1 1; animation: clock 8s linear infinite; transform-box: fill-box; transform-origin: center; }
+    .core-halo { fill: var(--accent); opacity: .06; animation: core-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .core { fill: var(--raised); stroke: var(--line); stroke-width: 1.3; }
+    .core.busy { stroke: var(--accent); }
+    .core-name { fill: var(--bone); font-size: 17px; font-weight: 500; letter-spacing: 2.5px; text-anchor: middle; }
+    .core-subtitle { fill: var(--ash); font-size: 9px; text-anchor: middle; }
+    .badge { fill: var(--raised); stroke: var(--accent); stroke-width: 1; }
+    .badge-text { fill: var(--hot); font-size: 8.5px; text-anchor: middle; }
+    .error-badge { fill: var(--red); }
+    .error-badge-text { fill: var(--ground); font-size: 9px; font-weight: 700; text-anchor: middle; }
+    .now {
+      padding: 9px 18px;
+      border-top: 1px solid var(--line);
+      color: var(--bone);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .feed { flex: 0 0 190px; min-height: 0; overflow: auto; padding: 4px 18px 14px; }
+    .row {
+      display: grid;
+      grid-template-columns: 12px 116px minmax(0, 1fr) 74px;
+      gap: 8px;
+      align-items: center;
+      min-height: 25px;
+      color: var(--ash);
+    }
+    .row .dot { color: var(--dim); }
+    .row.running .dot, .row.running .row-status { color: var(--hot); }
+    .row.failed .dot, .row.failed .row-status { color: var(--red); }
+    .row-station { color: var(--ash); }
+    .row-label, .file-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-status { text-align: right; color: var(--dim); font-size: 11px; }
+    .row-button { padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+    .row-button:hover { color: var(--hot); }
+    .details {
+      position: absolute;
+      inset: 12px;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--ground);
+      box-shadow: 0 12px 40px #0006;
+    }
+    .details[hidden] { display: none; }
+    .details-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .details-title { color: var(--hot); font-size: 13px; }
+    .back { padding: 5px 9px; }
+    .details-list { overflow: auto; }
+    .detail {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 80px;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 4px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--ash);
+      text-align: left;
+    }
+    .detail.clickable { cursor: pointer; }
+    .detail.clickable:hover { color: var(--hot); }
+    .detail-count { color: var(--dim); text-align: right; }
+    .empty { padding: 24px; color: var(--dim); text-align: center; }
+    @keyframes core-breathe { 0%, 100% { transform: scale(.96); opacity: .05; } 50% { transform: scale(1.08); opacity: .12; } }
+    @keyframes clock { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .station-halo, .core-halo, .clock { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div><span class="title">Карта активности</span><span class="summary" id="summary">0 действий</span></div>
+    <div class="zoom">
+      <button id="zoom-out" title="Уменьшить">−</button>
+      <button id="zoom-fit" title="По размеру">□</button>
+      <button id="zoom-in" title="Увеличить">+</button>
+    </div>
+  </div>
+  <div class="map-wrap">
+    <svg id="map" viewBox="0 0 460 430" role="img" aria-label="Карта активности Kimi Code"></svg>
+    <div class="details" id="details" hidden>
+      <div class="details-header"><span class="details-title" id="details-title"></span><button class="back" id="details-close">Карта</button></div>
+      <div class="details-list" id="details-list"></div>
+    </div>
+  </div>
+  <div class="now" id="now">Ожидание вызовов инструментов</div>
+  <div class="feed" id="feed"></div>
+</div>
+<script>
+  const stations = [
+    { id: "project", label: "Файлы", icon: "M-5.5 -8h7.5l3.5 3.5v12.5h-11zM2 -8v3.5h3.5" },
+    { id: "docs", label: "Документация", icon: "M-6 -8h12v16h-12zM-3 -4h6M-3 0h6M-3 4h4" },
+    { id: "skills", label: "Скиллы", icon: "M1.5 -8.5L-5.5 1h4.5l-1.5 7.5l7.5 -9.8h-4.5z" },
+    { id: "config", label: "Конфигурация", icon: "M-7 -7h14v14h-14zM-3 -3h6M-3 1h6M-3 5h3" },
+    { id: "shell", label: "Терминал", icon: "M-7.5 -5l5 5l-5 5M0 6h7.5" },
+    { id: "internet", label: "Сеть", icon: "M-7.8 0a7.8 7.8 0 1 0 15.6 0a7.8 7.8 0 1 0 -15.6 0M-7.8 0h15.6M0 -7.8c-4.2 4.2 -4.2 11.4 0 15.6M0 -7.8c4.2 4.2 4.2 11.4 0 15.6" },
+    { id: "agents", label: "Субагенты", icon: "M0 -4v3.5M0 -.5L-6 4M0 -.5L6 4M-2.1 -6a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0M-8.6 5.5a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0M4.4 5.5a2.1 2.1 0 1 0 4.2 0a2.1 2.1 0 1 0 -4.2 0" }
+  ];
+  const calls = new Map();
+  const W = 460, H = 430, CX = 230, CY = 204, RX = 176, RY = 151, NODE = 22, CORE = 40;
+  let zoom = 1;
+  let selected = null;
+  const map = document.getElementById("map");
+  const feed = document.getElementById("feed");
+  const nowLine = document.getElementById("now");
+  const details = document.getElementById("details");
+  const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+  const inputOf = tool => tool.rawInput && typeof tool.rawInput === "object" ? tool.rawInput : {};
+  const pathOf = tool => {
+    const input = inputOf(tool);
+    for (const key of ["path", "filePath", "file_path"]) if (typeof input[key] === "string" && input[key].trim()) return input[key];
+    return null;
+  };
+  const urlOf = tool => {
+    const input = inputOf(tool);
+    for (const key of ["url", "uri", "link", "endpoint"]) if (typeof input[key] === "string" && input[key].startsWith("http")) return input[key];
+    return null;
+  };
+  const isAgent = tool => /^agent/i.test((tool.title || "").trim()) || ["subagent_type", "subagentType", "agentType"].some(key => key in inputOf(tool));
+  const isSkill = path => {
+    const value = (path || "").toLowerCase();
+    return value.includes("/.kimi-code/skills/") || value.includes("/.claude/skills/") || value.endsWith("/skill.md");
+  };
+  const stationOf = tool => {
+    if (isAgent(tool)) return "agents";
+    if (/^skill$/i.test((tool.title || "").trim()) || "skill" in inputOf(tool)) return "skills";
+    if (urlOf(tool)) return "internet";
+    const path = pathOf(tool);
+    if (path) {
+      if (isSkill(path)) return "skills";
+      const ext = path.split(".").pop().toLowerCase();
+      if (["md", "mdx"].includes(ext)) return "docs";
+      const name = path.split("/").pop().toLowerCase();
+      if (["json", "yml", "yaml", "toml", "properties", "xml", "lock"].includes(ext) || [".gitignore", ".editorconfig", "dockerfile"].includes(name)) return "config";
+      return "project";
+    }
+    if ("command" in inputOf(tool) || /bash|shell|command/i.test(tool.title || "")) return "shell";
+    return "project";
+  };
+  const hostOf = url => { try { return new URL(url).host; } catch { return "Сетевой запрос"; } };
+  const shortPath = path => path.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+  const commandName = command => {
+    const first = String(command).trim().split(/\s+/)[0] || "shell";
+    return first.split(/[\\/]/).pop().slice(0, 40);
+  };
+  const labelOf = tool => {
+    const input = inputOf(tool);
+    if (typeof input.skill === "string" && input.skill.trim()) return input.skill.trim();
+    const path = pathOf(tool);
+    if (path) return shortPath(path);
+    const url = urlOf(tool);
+    if (url) return hostOf(url);
+    if (typeof input.command === "string") return commandName(input.command);
+    if (isAgent(tool)) return String(input.description || tool.title || "Субагент").slice(0, 80);
+    return tool.title || "Инструмент";
+  };
+  const point = id => {
+    const index = stations.findIndex(station => station.id === id);
+    const angle = index * Math.PI * 2 / stations.length;
+    return { x: CX + RX * Math.sin(angle), y: CY - RY * Math.cos(angle) };
+  };
+  const edge = (from, to, radius) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    return { x: from.x + (to.x - from.x) * radius / length, y: from.y + (to.y - from.y) * radius / length };
+  };
+  const pulse = (from, to, color, age) => {
+    const path = `M${from.x} ${from.y}L${to.x} ${to.y}`;
+    return [0, 1, 2].map(index => {
+      const begin = index * .045 - age / 1000;
+      return `<circle r="${3.8 - index * .8}" fill="${color}" opacity="0"><animateMotion path="${path}" begin="${begin}s" dur=".8s" fill="freeze"/><animate attributeName="opacity" values="${1 - index * .3};${1 - index * .3};0" keyTimes="0;.82;1" begin="${begin}s" dur=".8s" fill="freeze"/></circle>`;
+    }).join("");
+  };
+  const routeLeg = (fromId, toId) => {
+    const fromIndex = stations.findIndex(station => station.id === fromId);
+    const toIndex = stations.findIndex(station => station.id === toId);
+    const count = stations.length;
+    let steps = ((toIndex - fromIndex) % count + count) % count;
+    if (steps > count / 2) steps -= count;
+    const bendFactors = [.5, .5, .4, .45, .55, .75];
+    const angle = (fromIndex + steps / 2) * Math.PI * 2 / count;
+    const factor = bendFactors[Math.abs(steps)] ?? .5;
+    const bend = { x: CX + RX * factor * Math.sin(angle), y: CY - RY * factor * Math.cos(angle) };
+    return { start: edge(point(fromId), bend, NODE + 4), bend, end: edge(point(toId), bend, NODE + 4) };
+  };
+  function renderMap() {
+    const all = [...calls.values()];
+    const now = Date.now();
+    const core = { x: CX, y: CY };
+    let body = `<rect width="${W}" height="${H}" rx="12" fill="var(--ground)"/>`;
+    for (const [rx, ry] of [[66, 60], [104, 91], [142, 123]]) body += `<ellipse class="orbit" cx="${CX}" cy="${CY}" rx="${rx}" ry="${ry}"/>`;
+    for (const station of stations) {
+      const p = point(station.id);
+      const own = all.filter(call => call.station === station.id);
+      const a = edge(core, p, CORE + 8), b = edge(p, core, NODE);
+      const worn = Math.min(1, Math.log2(1 + own.length) / 7);
+      body += `<line class="spoke" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke-width="${1 + 2.6 * worn}"/>`;
+      if (worn > 0) body += `<line class="spoke-worn" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke-width="${1 + 2.6 * worn}" opacity="${worn * .55}"/>`;
+    }
+    const states = stations.map(station => {
+      const own = all.filter(call => call.station === station.id);
+      const running = own.filter(call => call.status === "in_progress");
+      const latest = own[own.length - 1];
+      const latestAge = latest ? now - (latest.endedAt || latest.startedAt) : Infinity;
+      const alarm = latest?.status === "failed" && latestAge < 6000;
+      return { station, p: point(station.id), own, running, failed: own.filter(call => call.status === "failed").length, latest, latestAge, alarm, lit: running.length > 0 || latestAge < 3200 };
+    });
+    for (const state of states) {
+      const { p, running, latestAge, alarm, lit } = state;
+      if (running.length) body += `<circle class="station-halo" cx="${p.x}" cy="${p.y}" r="${NODE + 10}" style="opacity:.16"/>`;
+      else if (lit || alarm) {
+        const span = alarm ? 6000 : 3200;
+        body += `<circle class="station-halo" cx="${p.x}" cy="${p.y}" r="${NODE + 10}" style="opacity:.3"><animate attributeName="opacity" values=".3;0" begin="${-latestAge / 1000}s" dur="${span / 1000}s" fill="freeze"/></circle>`;
+      }
+      if (running.length) body += `<circle cx="${p.x}" cy="${p.y}" r="${NODE}" fill="none" stroke="var(--accent)" stroke-width="1.3"><animate attributeName="r" values="${NODE};${NODE + 15}" dur="1.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0" dur="1.4s" repeatCount="indefinite"/></circle>`;
+    }
+    const route = [];
+    for (const call of all) {
+      const last = route[route.length - 1];
+      if (last?.station === call.station) last.at = call.startedAt;
+      else route.push({ station: call.station, at: call.startedAt });
+    }
+    const recentRoute = route.slice(-7);
+    for (let index = 1; index < recentRoute.length; index++) {
+      const target = recentRoute[index];
+      const age = now - target.at;
+      if (age >= 60000) continue;
+      const { start, bend, end } = routeLeg(recentRoute[index - 1].station, target.station);
+      const opacity = .12 + .5 * index / Math.max(1, recentRoute.length - 1);
+      body += `<path class="route" d="M${start.x} ${start.y}Q${bend.x} ${bend.y} ${end.x} ${end.y}" stroke-width="${index === recentRoute.length - 1 ? 1.5 : 1.1}" opacity="${opacity}"><animate attributeName="opacity" values="${opacity};0" begin="${(40000 - age) / 1000}s" dur="20s" fill="freeze"/></path>`;
+      if (index === recentRoute.length - 1) body += `<circle cx="${end.x}" cy="${end.y}" r="2.4" fill="var(--trail)" opacity=".85"><animate attributeName="opacity" values=".85;0" begin="${(40000 - age) / 1000}s" dur="20s" fill="freeze"/></circle>`;
+    }
+    for (const call of all.slice(-20)) {
+      const p = point(call.station);
+      const from = edge(core, p, CORE + 8), to = edge(p, core, NODE);
+      const age = now - call.startedAt;
+      if (age < 1600) body += `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="${call.status === "failed" ? "var(--red)" : "var(--accent)"}" stroke-width="1.4" opacity=".75"><animate attributeName="opacity" values=".75;0" begin="${-age / 1000}s" dur="1.6s" fill="freeze"/></line>`;
+      if (age < 1250) body += pulse(from, to, "var(--hot)", age);
+      if (call.endedAt && now - call.endedAt < 1250) body += pulse(to, from, call.status === "failed" ? "var(--red)" : "var(--ash)", now - call.endedAt);
+    }
+    for (const state of states) {
+      const { station, p, own, running, failed, latestAge, alarm, lit } = state;
+      const classes = ["station", running.length ? "active" : "", lit ? "recent" : "", alarm ? "error" : "", selected === station.id ? "selected" : ""].filter(Boolean).join(" ");
+      let cooling = "";
+      if (lit || alarm) {
+        const span = alarm ? 6000 : 3200;
+        cooling = `<circle class="station-ring" cx="0" cy="0" r="${NODE}" style="opacity:1"><animate attributeName="opacity" values="1;0" begin="${-latestAge / 1000}s" dur="${span / 1000}s" fill="freeze"/></circle>`;
+      }
+      const rim = `paint-order="stroke" stroke="var(--ground)" stroke-width="4" stroke-linejoin="round"`;
+      const above = p.y < CY;
+      const labelY = above ? -NODE - 20 : NODE + 16;
+      const countY = above ? -NODE - 7 : NODE + 30;
+      body += `<g class="${classes}" data-station="${station.id}" transform="translate(${p.x} ${p.y})"><circle class="node" r="${NODE}"/>${cooling}${running.length ? `<circle class="station-ring" r="${NODE + 4}" style="opacity:.85"/><circle class="clock" r="${NODE + 5}" pathLength="1"/>` : ""}<path class="glyph" d="${station.icon}"/><text class="station-label" y="${labelY}" ${rim} fill="${lit || alarm ? "var(--bone)" : "var(--ash)"}">${station.label}</text>${own.length ? `<text class="station-count" y="${countY}" ${rim}>${own.length}</text>` : ""}${running.length > 1 ? `<circle class="badge" cx="16" cy="-16" r="8"/><text class="badge-text" x="16" y="-13">×${running.length}</text>` : ""}${failed ? `<circle class="error-badge" cx="-16" cy="-16" r="7.5"/><text class="error-badge-text" x="-16" y="-13">${Math.min(failed, 99)}</text>` : ""}</g>`;
+    }
+    const busy = all.some(call => call.status === "in_progress");
+    body += `<circle class="core-halo" cx="${CX}" cy="${CY}" r="${CORE + 9}"/><circle class="core ${busy ? "busy" : ""}" cx="${CX}" cy="${CY}" r="${CORE}"/><text class="core-name" x="${CX}" y="${CY + 2}">KIMI</text><text class="core-subtitle" x="${CX}" y="${CY + 18}">CODE</text>`;
+    map.innerHTML = body;
+    map.querySelectorAll(".station").forEach(node => node.addEventListener("click", () => showDetails(node.dataset.station)));
+    document.getElementById("summary").textContent = `${all.length} действий`;
+    const running = all.filter(call => call.status === "in_progress");
+    nowLine.textContent = running.length ? `Сейчас: ${stations.find(s => s.id === running[running.length - 1].station).label}: ${labelOf(running[running.length - 1].tool)}` : all.length ? `Последнее: ${labelOf(all[all.length - 1].tool)}` : "Ожидание вызовов инструментов";
+  }
+  function renderFeed() {
+    const all = [...calls.values()];
+    feed.innerHTML = all.slice(-12).reverse().map(call => {
+      const status = call.status === "in_progress" ? "running" : call.status === "failed" ? "ошибка" : "готово";
+      const stateClass = call.status === "in_progress" ? "running" : call.status === "failed" ? "failed" : "";
+      return `<div class="row ${stateClass}"><span class="dot">${call.status === "in_progress" ? "●" : call.status === "failed" ? "×" : "·"}</span><span class="row-station">${stations.find(s => s.id === call.station).label}</span><button class="row-button row-label" data-call="${esc(call.id)}" title="${esc(labelOf(call.tool))}">${esc(labelOf(call.tool))}</button><span class="row-status">${status}</span></div>`;
+    }).join("");
+    feed.querySelectorAll("[data-call]").forEach(button => button.addEventListener("click", () => {
+      const call = calls.get(button.dataset.call);
+      if (call?.path) send("file.open", { path: call.path });
+      else if (call?.url) send("link.open", { url: call.url });
+      else if (call) showDetails(call.station);
+    }));
+  }
+  function showDetails(stationId) {
+    selected = stationId;
+    const station = stations.find(item => item.id === stationId);
+    const own = [...calls.values()].filter(call => call.station === stationId);
+    document.getElementById("details-title").textContent = `${station.label} · ${own.length}`;
+    const grouped = new Map();
+    for (const call of own) {
+      const key = call.path || call.url || labelOf(call.tool);
+      const label = call.path ? shortPath(call.path) : call.url ? hostOf(call.url) : labelOf(call.tool);
+      const item = grouped.get(key) || { label, count: 0, path: call.path, url: call.url };
+      item.count++;
+      grouped.set(key, item);
+    }
+    document.getElementById("details-list").innerHTML = grouped.size ? [...grouped.values()].reverse().map(item => `<button class="detail ${item.path || item.url ? "clickable" : ""}" data-key="${esc(item.path || item.url || "")}" ${item.path || item.url ? "" : "disabled"}><span class="file-label" title="${esc(item.label)}">${esc(item.label)}</span><span class="detail-count">${item.count} обращ.</span></button>`).join("") : `<div class="empty">В этой категории пока нет действий</div>`;
+    document.querySelectorAll(".detail.clickable").forEach(button => button.addEventListener("click", () => {
+      const key = button.dataset.key;
+      if (key.startsWith("http")) send("link.open", { url: key });
+      else send("file.open", { path: key });
+    }));
+    details.hidden = false;
+    renderMap();
+  }
+  function send(type, payload = {}) {
+    window.AiExplorerHost?.send(JSON.stringify({ type, ...payload }));
+  }
+  function render() { renderMap(); renderFeed(); if (selected && !details.hidden) showDetails(selected); }
+  window.AiExplorer = {
+    receive(event) {
+      if (event.type === "theme") {
+        document.documentElement.dataset.theme = event.dark ? "dark" : "light";
+        return;
+      }
+      if (event.type === "history.loading") {
+        calls.clear();
+        selected = null;
+        details.hidden = true;
+        render();
+        return;
+      }
+      if (event.type !== "tool.updated") return;
+      const update = event.update || {};
+      if (!update.toolCallId) return;
+      const previous = calls.get(update.toolCallId);
+      const tool = { ...previous?.tool, ...update };
+      const now = Date.now();
+      const call = {
+        id: update.toolCallId,
+        tool,
+        station: previous?.station || stationOf(tool),
+        path: pathOf(tool),
+        url: urlOf(tool),
+        status: update.status || previous?.status || "in_progress",
+        startedAt: previous?.startedAt || now,
+        endedAt: update.status && update.status !== "in_progress" ? now : previous?.endedAt
+      };
+      calls.set(call.id, call);
+      render();
+    }
+  };
+  function applyZoom() {
+    const width = W / zoom, height = H / zoom;
+    map.setAttribute("viewBox", `${CX - width / 2} ${CY - height / 2} ${width} ${height}`);
+  }
+  document.getElementById("zoom-in").addEventListener("click", () => { zoom = Math.min(1.8, zoom + .15); applyZoom(); });
+  document.getElementById("zoom-out").addEventListener("click", () => { zoom = Math.max(.7, zoom - .15); applyZoom(); });
+  document.getElementById("zoom-fit").addEventListener("click", () => { zoom = 1; applyZoom(); details.hidden = true; selected = null; renderMap(); });
+  document.getElementById("details-close").addEventListener("click", () => { details.hidden = true; selected = null; renderMap(); });
+  window.AiExplorerHost = window.AiExplorerHost || { send() {} };
+  render();
+  send("ui.ready");
+</script>
+</body>
+</html>

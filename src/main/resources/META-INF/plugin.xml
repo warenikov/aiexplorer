@@ -1,0 +1,24 @@
+<idea-plugin>
+    <id>ru.aiforopenide.explorer</id>
+    <name>AI Explorer</name>
+    <vendor>AI Explorer contributors</vendor>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
+    <depends>com.intellij.modules.jcef</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="AI Explorer"
+                    anchor="left"
+                    secondary="true"
+                    factoryClass="ru.aiforopenide.explorer.AiExplorerToolWindowFactory"
+                    icon="AllIcons.Actions.IntentionBulbGrey"/>
+        <fileEditorProvider implementation="ru.aiforopenide.explorer.AiChatEditorProvider"/>
+        <notificationGroup id="AI Explorer" displayType="BALLOON"/>
+    </extensions>
+    <actions>
+        <action id="ru.aiforopenide.explorer.AddSelection"
+                class="ru.aiforopenide.explorer.AddSelectionToAiChatAction">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+        </action>
+    </actions>
+</idea-plugin>
