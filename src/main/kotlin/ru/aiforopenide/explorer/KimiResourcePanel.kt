@@ -41,6 +41,7 @@ internal class KimiResourcePanel(
     private var refreshAgain = false
 
     init {
+        project.messageBus.connect(this).subscribe(AiExplorerLocaleListener.TOPIC, AiExplorerLocaleListener { reloadWeb() })
         project.messageBus.connect(this).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
             override fun after(events: List<VFileEvent>) {
                 if (events.any { it.path.endsWith(".md") || it.path.endsWith(".json") || it.path.endsWith(".toml") }) {
@@ -61,7 +62,7 @@ internal class KimiResourcePanel(
     private fun initializeBrowser() {
         if (Disposer.isDisposed(this) || browser != null) return
         if (!JBCefApp.isSupported()) {
-            add(JBLabel("Для этого раздела необходим JCEF", JBLabel.CENTER), BorderLayout.CENTER)
+            add(JBLabel(AiExplorerBundle.message("jcef.required"), JBLabel.CENTER), BorderLayout.CENTER)
             return
         }
         val newBrowser = JBCefBrowser.createBuilder().setOffScreenRendering(false).build()
@@ -91,11 +92,16 @@ internal class KimiResourcePanel(
             </script>
         """.trimIndent()
         val insertionPoint = html.lastIndexOf("</head>").also { require(it >= 0) }
-        val document = html.substring(0, insertionPoint) + script + html.substring(insertionPoint)
+        val document = html.substring(0, insertionPoint) + AiExplorerWebLocalization.script() + script + html.substring(insertionPoint)
         return Files.createTempFile("ai-explorer-resources-", ".html").also { file ->
             Files.writeString(file, document)
             file.toFile().deleteOnExit()
         }
+    }
+
+    private fun reloadWeb() {
+        ready = false
+        browser?.loadURL(createWebFile().toUri().toString())
     }
 
     private fun handleCommand(message: String) {
@@ -110,10 +116,10 @@ internal class KimiResourcePanel(
                     }
                     "resources.refresh" -> refreshResources()
                     "file.open" -> openFile(command.get("path").asString)
-                    "mcp.save" -> mutateMcp(command.get("oldName")?.asString, "Сохранено. Настройки применятся в новой сессии Kimi") {
+                    "mcp.save" -> mutateMcp(command.get("oldName")?.asString, AiExplorerBundle.message("mcp.saved")) {
                         store.saveMcp(command)
                     }
-                    "mcp.delete" -> mutateMcp(null, "Сервер удалён") {
+                    "mcp.delete" -> mutateMcp(null, AiExplorerBundle.message("mcp.deleted")) {
                         store.deleteMcp(command.get("scope").asString, command.get("name").asString)
                     }
                 }
@@ -149,7 +155,7 @@ internal class KimiResourcePanel(
                 success
             } catch (e: Exception) {
                 log.warn("Cannot update MCP configuration", e)
-                "Ошибка: ${e.message ?: "не удалось сохранить"}"
+                AiExplorerBundle.message("mcp.error", e.message ?: AiExplorerBundle.message("mcp.save.failed"))
             }
             onEdt {
                 post("mcp.result") {

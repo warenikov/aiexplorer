@@ -14,6 +14,11 @@
                     icon="AllIcons.Actions.IntentionBulbGrey"/>
         <fileEditorProvider implementation="ru.aiforopenide.explorer.AiChatEditorProvider"/>
         <notificationGroup id="AI Explorer" displayType="BALLOON"/>
+        <applicationConfigurable parentId="tools"
+                                 instance="ru.aiforopenide.explorer.AiExplorerConfigurable"
+                                 id="ru.aiforopenide.explorer.settings"
+                                 key="settings.name"
+                                 bundle="messages.AiExplorerBundle"/>
     </extensions>
     <actions>
         <action id="ru.aiforopenide.explorer.AddSelection"

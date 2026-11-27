@@ -11,11 +11,13 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 
 class AddSelectionToAiChatAction : AnAction(
-    "Добавить в AI Explorer…",
-    "Добавить выделенный код и комментарий в текущий чат",
+    AiExplorerBundle.message("action.add.selection"),
+    AiExplorerBundle.message("action.add.selection.description"),
     AllIcons.Actions.IntentionBulbGrey,
 ) {
     override fun update(event: AnActionEvent) {
+        event.presentation.text = AiExplorerBundle.message("action.add.selection")
+        event.presentation.description = AiExplorerBundle.message("action.add.selection.description")
         val editor = event.getData(CommonDataKeys.EDITOR)
         val file = event.getData(CommonDataKeys.VIRTUAL_FILE)
         event.presentation.isEnabledAndVisible = editor != null && file != null && editor.selectionModel.hasSelection()
@@ -66,11 +68,11 @@ private class SelectionCommentDialog(project: Project) : DialogWrapper(project) 
     private val commentArea = JBTextArea(5, 52)
 
     init {
-        title = "Добавить в AI Explorer"
+        title = AiExplorerBundle.message("dialog.add.selection.title")
         commentArea.lineWrap = true
         commentArea.wrapStyleWord = true
-        commentArea.emptyText.text = "Комментарий к выделенному коду…"
-        setOKButtonText("Добавить в чат")
+        commentArea.emptyText.text = AiExplorerBundle.message("dialog.add.selection.comment")
+        setOKButtonText(AiExplorerBundle.message("dialog.add.selection.ok"))
         init()
     }
 

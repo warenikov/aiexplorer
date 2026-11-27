@@ -35,7 +35,7 @@ function bind(){
  document.querySelectorAll("[data-form]").forEach(form=>{
   form.querySelector("[name=transport]").addEventListener("change",()=>{const server=findServer(form.dataset.form);server.config={...server.config,transport:form.elements.transport.value};render();});
   form.addEventListener("submit",event=>{event.preventDefault();const f=form.elements;send("mcp.save",{scope:form.dataset.scope,oldName:form.dataset.old,name:f.name.value,transport:f.transport.value,command:f.command?.value||"",url:f.url?.value||"",args:f.args?.value||"",cwd:f.cwd?.value||"",env:f.env?.value||"",bearerTokenEnvVar:f.bearerTokenEnvVar?.value||"",enabled:f.enabled.checked,deferred:f.deferred.checked});});
-  form.querySelector("[data-remove]").addEventListener("click",()=>{if(confirm(`Удалить MCP-сервер «${form.dataset.old}»?`))send("mcp.delete",{scope:form.dataset.scope,name:form.dataset.old});});
+  form.querySelector("[data-remove]").addEventListener("click",()=>{if(confirm(window.AI_EXPLORER_LOCALE==="en"?`Delete MCP server "${form.dataset.old}"?`:`Удалить MCP-сервер «${form.dataset.old}»?`))send("mcp.delete",{scope:form.dataset.scope,name:form.dataset.old});});
  });
 }
 function findServer(id){for(const group of groups){const server=(group.children||[]).find(s=>s.serverId===id);if(server)return server;}return null;}

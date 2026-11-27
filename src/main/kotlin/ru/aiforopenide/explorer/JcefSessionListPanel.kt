@@ -40,6 +40,7 @@ internal class JcefSessionListPanel(
     private val refreshTimer = Timer(2000) { if (isShowing) refreshSessions() }
 
     init {
+        project.messageBus.connect(this).subscribe(AiExplorerLocaleListener.TOPIC, AiExplorerLocaleListener { reloadWeb() })
         Disposer.register(this, Disposable {
             refreshTimer.stop()
             removeAll()
@@ -58,7 +59,7 @@ internal class JcefSessionListPanel(
     private fun initializeBrowser() {
         if (Disposer.isDisposed(this) || browser != null) return
         if (!JBCefApp.isSupported()) {
-            add(JBLabel("<html><center>Для AI Explorer необходим JCEF.<br>Включите плагин Web Browser (JCEF) в OpenIDE.</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
+            add(JBLabel("<html><center>${AiExplorerBundle.message("jcef.sidebar.required")}</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
             return
         }
         val newBrowser = JBCefBrowser.createBuilder().setOffScreenRendering(false).build()
@@ -88,8 +89,8 @@ internal class JcefSessionListPanel(
                 if (!footer) return;
                 const login = document.createElement("button");
                 login.className = "auth-login";
-                login.textContent = "Войти в Kimi Code";
-                login.title = "Войти или сменить аккаунт через стандартную авторизацию Kimi CLI";
+                login.textContent = ${gson.toJson(AiExplorerBundle.message("session.login"))};
+                login.title = ${gson.toJson(AiExplorerBundle.message("session.login.hint"))};
                 login.addEventListener("click", function() {
                   window.AiExplorerHost.send(JSON.stringify({ type: "auth.login" }));
                 });
@@ -191,11 +192,16 @@ internal class JcefSessionListPanel(
             </style>
         """.trimIndent()
         val insertionPoint = html.lastIndexOf("</head>").also { require(it >= 0) { "AI Explorer HTML head is missing" } }
-        val document = html.substring(0, insertionPoint) + script + style + html.substring(insertionPoint)
+        val document = html.substring(0, insertionPoint) + AiExplorerWebLocalization.script() + script + style + html.substring(insertionPoint)
         return Files.createTempFile("ai-explorer-", ".html").also { file ->
             Files.writeString(file, document)
             file.toFile().deleteOnExit()
         }
+    }
+
+    private fun reloadWeb() {
+        ready = false
+        browser?.loadURL(createWebFile().toUri().toString())
     }
 
     private fun handleCommand(message: String) {

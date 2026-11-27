@@ -32,10 +32,8 @@ class KimiFileGraphPanel(
 ) : JPanel(BorderLayout()), Disposable {
     private val log = Logger.getInstance(KimiFileGraphPanel::class.java)
     private val gson = Gson()
-    private val reader = KimiSessionGraphReader(
-        project.basePath?.let(Path::of) ?: Path.of(System.getProperty("user.home")),
-        arguments.indexOf("--session").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) },
-    )
+    private val requestedSessionId = arguments.indexOf("--session").takeIf { it >= 0 }?.let { arguments.getOrNull(it + 1) }
+    private var reader = newReader()
     private val refreshTimer = Timer(1200) { refreshEvents() }
     private val refreshing = AtomicBoolean(false)
     private var browser: JBCefBrowser? = null
@@ -44,6 +42,7 @@ class KimiFileGraphPanel(
     private val pendingEvents = mutableListOf<JsonObject>()
 
     init {
+        project.messageBus.connect(this).subscribe(AiExplorerLocaleListener.TOPIC, AiExplorerLocaleListener { reloadWeb() })
         Disposer.register(this, Disposable {
             refreshTimer.stop()
             removeAll()
@@ -58,7 +57,7 @@ class KimiFileGraphPanel(
     private fun initializeBrowser() {
         if (Disposer.isDisposed(this) || browser != null) return
         if (!JBCefApp.isSupported()) {
-            add(JBLabel("<html><center>Для графа файлов необходим JCEF.<br>Включите плагин Web Browser (JCEF) в OpenIDE.</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
+            add(JBLabel("<html><center>${AiExplorerBundle.message("jcef.graph.required")}</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
             return
         }
         val newBrowser = JBCefBrowser.createBuilder().setOffScreenRendering(false).build()
@@ -86,11 +85,22 @@ class KimiFileGraphPanel(
             </script>
         """.trimIndent()
         val insertionPoint = html.lastIndexOf("</head>").also { require(it >= 0) { "AI Explorer HTML head is missing" } }
-        val document = html.substring(0, insertionPoint) + script + html.substring(insertionPoint)
+        val document = html.substring(0, insertionPoint) + AiExplorerWebLocalization.script() + script + html.substring(insertionPoint)
         return Files.createTempFile("ai-explorer-graph-", ".html").also { file ->
             Files.writeString(file, document)
             file.toFile().deleteOnExit()
         }
+    }
+
+    private fun newReader() = KimiSessionGraphReader(
+        project.basePath?.let(Path::of) ?: Path.of(System.getProperty("user.home")),
+        requestedSessionId,
+    )
+
+    private fun reloadWeb() {
+        ready = false
+        reader = newReader()
+        browser?.loadURL(createWebFile().toUri().toString())
     }
 
     private fun handleCommand(message: String) {

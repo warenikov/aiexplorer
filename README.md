@@ -1,139 +1,151 @@
 # AI Explorer for OpenIDE
 
-Плагин встраивает настоящий **Kimi Code CLI** в OpenIDE и добавляет удобную навигацию по сессиям, скиллам, настройкам и MCP-серверам.
+**English** | [Русский](README.ru.md)
 
-Диалог работает в полноценном PTY-терминале: это не отдельный чат и не ограниченная эмуляция CLI. Все команды, интерактивные меню и возможности Kimi Code остаются доступными.
+AI Explorer embeds the full **Kimi Code CLI** in OpenIDE and provides convenient navigation through sessions, skills, settings, and MCP servers.
 
-## Возможности
+The conversation runs in a full PTY terminal rather than a separate chat or a limited CLI emulation. All commands, interactive menus, and Kimi Code features remain available.
 
-### Настоящий Kimi Code в IDE
+## Features
 
-- Полноценный терминал с цветным выводом, интерактивными меню и slash-командами.
-- Работа в корне текущего проекта.
-- Отдельный процесс Kimi Code для каждой открытой сессии.
-- Создание нового чата, продолжение последнего и открытие выбранной сессии.
-- Доступны `/sessions`, `/new`, `/compact`, `/model`, `/permission` и остальные штатные команды CLI.
-- При закрытии вкладки связанный терминальный процесс завершается.
+### Full Kimi Code in the IDE
 
-### Список чатов
+- A full terminal with colored output, interactive menus, and slash commands.
+- Runs in the current project root.
+- A separate Kimi Code process for each open session.
+- Start a new chat, resume the latest session, or open a selected session.
+- Use `/sessions`, `/new`, `/compact`, `/model`, `/permission`, and other standard CLI commands.
+- Closing a tab terminates its terminal process.
 
-- Сессии загружаются из локального хранилища Kimi Code.
-- Отображаются только неархивные сессии текущего проекта.
-- Поиск, группировка по датам, обновление и быстрое открытие.
-- Переименование и удаление сессий из бокового окна.
-- Названия открытых вкладок автоматически обновляются после того, как Kimi создаёт заголовок сессии.
-- Переименование не перезапускает терминал и не теряет текущий диалог.
+### Chat list
 
-### Вход в аккаунт Kimi
+- Sessions are loaded from the local Kimi Code storage.
+- Only unarchived sessions from the current project are shown.
+- Search, date grouping, refresh, and quick session opening.
+- Rename and delete sessions from the side panel.
+- Open tab titles update automatically after Kimi generates a session title.
+- Renaming does not restart the terminal or lose the current conversation.
 
-Кнопка **«Войти в Kimi Code»** запускает штатный `kimi login` в отдельной терминальной вкладке.
+### Kimi account sign-in
 
-Используется стандартный OAuth device-code flow: Kimi показывает ссылку и код для авторизации. Плагин не читает, не передаёт и не сохраняет токены самостоятельно. Ту же кнопку можно использовать для смены аккаунта.
+The **Sign in to Kimi Code** button starts the standard `kimi login` command in a separate terminal tab.
 
-### Карта активности
+It uses the standard OAuth device-code flow: Kimi displays an authorization link and code. The plugin does not read, transmit, or store tokens itself. The same button can be used to switch accounts.
 
-Кнопка **«Граф файлов»** переключает редактор между терминалом и визуальной картой работы Kimi.
+### Activity graph
 
-На карте отображаются:
+The **Show activity graph** button switches the editor between the terminal and a visual map of Kimi's work.
 
-- файлы проекта;
-- документация;
-- скиллы;
-- конфигурация;
-- терминальные команды;
-- обращения к сети;
-- субагенты.
+The graph displays:
 
-Дополнительно доступны:
+- project files;
+- documentation;
+- skills;
+- configuration;
+- terminal commands;
+- network requests;
+- subagents.
 
-- ленты между источниками и результатами действий;
-- фильтрация по источнику или результату;
-- центральный счётчик действий за сессию;
-- таблицы файлов и полных терминальных команд;
-- история обращений с точным временем и длительностью;
-- открытие файла в IDE или сайта в браузере.
+Additional features:
 
-Карта читает локальные журналы текущей сессии и обновляется во время работы. Оформление адаптировано из [Lot Map](https://github.com/alexeyw/lot-map) по лицензии MIT.
+- flows between action sources and outcomes;
+- filtering by source or outcome;
+- a central session action counter;
+- tables of files and full terminal commands;
+- request history with exact timestamps and durations;
+- opening files in the IDE or websites in the browser.
 
-### Навигатор скиллов
+The graph reads the current session's local journals and updates as Kimi works.
 
-Вкладка **Skills** рядом с **Chats** показывает скиллы, доступные на компьютере и в проекте:
+![AI Explorer activity graph](docs/screenshots/activity-graph.png)
 
-- глобальные и проектные каталоги;
-- дополнительные каталоги из `extra_skill_dirs`;
-- вложенные каталоги и вспомогательные файлы;
-- описания из frontmatter;
-- локальные Markdown- и wiki-ссылки между документами.
+### Skills navigator
 
-Поиск учитывает названия, описания и пути. Файл открывается в основном редакторе OpenIDE, где его можно читать и изменять.
+The **Skills** tab next to **Chats** shows skills available on your computer and in the project:
 
-### Настройки и инструкции
+- global and project directories;
+- additional directories from `extra_skill_dirs`;
+- nested directories and supporting files;
+- frontmatter descriptions;
+- local Markdown and wiki links between documents.
 
-Вкладка **Settings** собирает конфигурацию Kimi Code:
+Search covers names, descriptions, and paths. Files open in the main OpenIDE editor, where they can be read and edited.
 
-- глобальные `AGENTS.md` и тематические документы, связанные ссылками;
-- глобальные `config.toml` и `tui.toml`;
-- проектные и вложенные `AGENTS.md`, `CLAUDE.md`;
-- проектные настройки из `.kimi-code`.
+### Settings and instructions
 
-Для проектных инструкций отображается относительный каталог, поэтому видно, к какой части проекта относится файл.
+The **Settings** tab gathers Kimi Code configuration:
 
-### MCP-серверы
+- global `AGENTS.md` and related documents connected by links;
+- global `config.toml` and `tui.toml`;
+- project and nested `AGENTS.md` and `CLAUDE.md` files;
+- project settings from `.kimi-code`.
 
-Вкладка **MCP** показывает:
+Project instructions show their relative directory, making it clear which part of the project each file applies to.
 
-- глобальные и проектные конфигурации;
-- имена серверов и способ подключения;
-- включён или выключен сервер;
-- какие проектные записи переопределяют глобальные.
+### MCP servers
 
-Сервер раскрывается в форму прямо в дереве: можно изменить тип подключения, команду или URL, рабочую директорию, переменные окружения и режим запуска. Поддерживаются создание, переименование, отключение и удаление серверов. Сохранение не затирает остальные поля `mcp.json`; существующие секреты и чувствительные URL не отображаются. Кнопка «Дополнительно → JSON» открывает исходный файл для нестандартных настроек.
+The **MCP** tab shows:
 
-### Работа с текстом и изображениями
+- global and project configurations;
+- server names and connection types;
+- whether a server is enabled or disabled;
+- which project entries override global ones.
 
-- `Cmd+V` вставляет обычный текст.
-- Если в буфере обмена изображение, `Cmd+V` передаёт Kimi штатную команду `Ctrl+V` для прикрепления картинки.
-- `Ctrl+V` продолжает вызывать стандартное прикрепление изображения.
-- Плагин не сохраняет изображения во временные файлы самостоятельно — этим управляет Kimi CLI.
-- HTTP и HTTPS ссылки в выводе становятся кликабельными и открываются в системном браузере.
-- Действие **«Добавить в AI Explorer…»** переносит выделенный код, путь и строки в текущий терминал без автоматической отправки.
+Each server expands into an editor directly in the tree. You can change the connection type, command or URL, working directory, environment variables, and startup mode. Creating, renaming, disabling, and deleting servers are supported. Saving preserves the remaining `mcp.json` fields; existing secrets and sensitive URLs are not displayed. **Advanced → JSON** opens the source file for non-standard settings.
 
-## Установка
+![MCP server editor in AI Explorer](docs/screenshots/mcp.png)
 
-1. Установите и настройте [Kimi Code CLI](https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html).
-2. В OpenIDE откройте **Settings → Plugins → Install Plugin from Disk**.
-3. Выберите ZIP-дистрибутив AI Explorer.
-4. Перезапустите IDE и откройте окно **AI Explorer**.
+### Text and images
 
-Для JCEF-интерфейсов необходим штатный плагин **Web Browser (JCEF)**. Для терминала — плагин **Terminal**. В поддерживаемой сборке OpenIDE обе зависимости уже используются как bundled plugins.
+- `Cmd+V` pastes ordinary text.
+- If the clipboard contains an image, `Cmd+V` sends Kimi the standard `Ctrl+V` command to attach it.
+- `Ctrl+V` continues to invoke the standard image attachment flow.
+- The plugin does not save images to temporary files itself; Kimi CLI handles this.
+- HTTP and HTTPS links in terminal output become clickable and open in the system browser.
+- **Add to AI Explorer…** transfers selected code, its path, and line numbers to the current terminal without sending it automatically.
 
-## Сборка
+## Language and settings
 
-Требуется Java Runtime из OpenIDE и Gradle Wrapper, включённый в репозиторий.
+The interface is available in English and Russian. English is the default.
+
+Select the language in **Settings → Tools → AI Explorer**. It applies to open panels without restarting terminals and is preserved between IDE launches.
+
+## Installation
+
+1. Install and configure [Kimi Code CLI](https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html).
+2. In OpenIDE, open **Settings → Plugins → Install Plugin from Disk**.
+3. Select the AI Explorer ZIP distribution.
+4. Restart the IDE and open the **AI Explorer** window.
+
+The JCEF interface requires the bundled **Web Browser (JCEF)** plugin. The terminal requires the bundled **Terminal** plugin.
+
+## Building
+
+Use the Java Runtime bundled with OpenIDE and the Gradle Wrapper included in the repository.
 
 ```bash
 JAVA_HOME="/Applications/OpenIDE.app/Contents/jbr/Contents/Home" ./gradlew buildPlugin
 ```
 
-Готовый дистрибутив появится в `build/distributions/`.
+The distribution will appear in `build/distributions/`.
 
-Для проверки компиляции без сборки ZIP:
+To check compilation without building the ZIP:
 
 ```bash
 JAVA_HOME="/Applications/OpenIDE.app/Contents/jbr/Contents/Home" ./gradlew compileKotlin
 ```
 
-## Технические особенности
+## Technical details
 
-- Kotlin и IntelliJ Platform Gradle Plugin.
-- JediTermWidget и PtyProcessBuilder для настоящего PTY.
-- JCEF для бокового интерфейса, карты активности и навигаторов ресурсов.
-- Локальное чтение сессий и конфигурации Kimi Code.
-- Обновление ресурсов после изменения файлов через VFS.
-- Никакого ACP и собственного протокола диалога.
+- Kotlin and IntelliJ Platform Gradle Plugin.
+- JediTermWidget and PtyProcessBuilder for a real PTY.
+- JCEF for the side panel, activity graph, and resource navigators.
+- Local reading of Kimi Code sessions and configuration.
+- Resource refresh after file changes through VFS.
+- No ACP or custom conversation protocol.
 
-Подробное описание поведения находится в [SPEC.md](SPEC.md).
+See [SPEC.md](SPEC.md) for a detailed description of the behavior.
 
-## Текущая версия
+## Current version
 
-**0.6.0**
+**0.7.0**

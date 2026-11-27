@@ -78,7 +78,7 @@ class KimiTerminalPanel(
         } catch (e: Exception) {
             log.warn("Cannot start Kimi Code terminal", e)
             removeAll()
-            add(JBLabel("<html><center>Не удалось запустить Kimi Code.<br>${e.message}</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
+            add(JBLabel("<html><center>${AiExplorerBundle.message("terminal.start.failed", e.message ?: "Unknown error")}</center></html>", JBLabel.CENTER), BorderLayout.CENTER)
         }
     }
 

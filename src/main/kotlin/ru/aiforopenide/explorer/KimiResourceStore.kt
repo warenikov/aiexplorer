@@ -25,11 +25,11 @@ class KimiResourceStore(projectPath: Path) {
 
     private fun skills(): JsonArray {
         val roots = mutableListOf<Triple<String, String, Path>>()
-        roots += Triple("Проект", "project", project.resolve(".kimi-code/skills"))
-        roots += Triple("Проект", "project", project.resolve(".agents/skills"))
-        roots += Triple("Глобальные", "global", kimiHome.resolve("skills"))
-        roots += Triple("Глобальные", "global", home.resolve(".agents/skills"))
-        extraSkillDirectories().forEach { roots += Triple("Дополнительные", "extra", it) }
+        roots += Triple(AiExplorerBundle.message("resources.project"), "project", project.resolve(".kimi-code/skills"))
+        roots += Triple(AiExplorerBundle.message("resources.project"), "project", project.resolve(".agents/skills"))
+        roots += Triple(AiExplorerBundle.message("resources.global"), "global", kimiHome.resolve("skills"))
+        roots += Triple(AiExplorerBundle.message("resources.global"), "global", home.resolve(".agents/skills"))
+        extraSkillDirectories().forEach { roots += Triple(AiExplorerBundle.message("resources.extra"), "extra", it) }
         return JsonArray().apply {
             roots.filter { Files.isDirectory(it.third) }.forEach { (_, scope, root) ->
                 Files.list(root).use { paths ->
@@ -63,10 +63,10 @@ class KimiResourceStore(projectPath: Path) {
 
     private fun settings(): JsonArray {
         val global = JsonArray()
-        addDocument(global, kimiHome.resolve("AGENTS.md"), "global", "Глобальные инструкции")
-        addDocument(global, home.resolve(".claude/CLAUDE.md"), "global", "Глобальные инструкции Claude")
-        addFile(global, kimiHome.resolve("config.toml"), "global", "Основные настройки")
-        addFile(global, kimiHome.resolve("tui.toml"), "global", "Настройки терминала")
+        addDocument(global, kimiHome.resolve("AGENTS.md"), "global", AiExplorerBundle.message("resources.instructions"))
+        addDocument(global, home.resolve(".claude/CLAUDE.md"), "global", AiExplorerBundle.message("resources.instructions.claude"))
+        addFile(global, kimiHome.resolve("config.toml"), "global", AiExplorerBundle.message("resources.settings"))
+        addFile(global, kimiHome.resolve("tui.toml"), "global", AiExplorerBundle.message("resources.terminal"))
 
         val projectFiles = JsonArray()
         if (Files.isDirectory(project)) {
@@ -76,14 +76,14 @@ class KimiResourceStore(projectPath: Path) {
                     .filter { it.name == "AGENTS.md" || it.name == "CLAUDE.md" || it.name == "claude.md" }
                     .filterNot { it.any { part -> part.name in ignoredDirectories } }
                     .sorted()
-                    .forEach { addDocument(projectFiles, it, "project", project.relativize(it.parent).toString().ifEmpty { "Корень проекта" }) }
+                    .forEach { addDocument(projectFiles, it, "project", project.relativize(it.parent).toString().ifEmpty { AiExplorerBundle.message("resources.project.root") }) }
             }
         }
-        addFile(projectFiles, project.resolve(".kimi-code/config.toml"), "project", "Настройки проекта")
-        addFile(projectFiles, project.resolve(".kimi-code/local.toml"), "project", "Локальные настройки проекта")
+        addFile(projectFiles, project.resolve(".kimi-code/config.toml"), "project", AiExplorerBundle.message("resources.project.settings"))
+        addFile(projectFiles, project.resolve(".kimi-code/local.toml"), "project", AiExplorerBundle.message("resources.project.local"))
         return JsonArray().apply {
-            add(group("Глобальные", null, "global", global))
-            add(group("Проект", null, "project", projectFiles))
+            add(group(AiExplorerBundle.message("resources.global"), null, "global", global))
+            add(group(AiExplorerBundle.message("resources.project"), null, "project", projectFiles))
         }
     }
 
@@ -92,8 +92,8 @@ class KimiResourceStore(projectPath: Path) {
         val projectPath = project.resolve(".kimi-code/mcp.json")
         val globalServers = serverNames(globalPath)
         return JsonArray().apply {
-            add(mcpGroup("Глобальные", globalPath, "global", emptySet()))
-            add(mcpGroup("Проект", projectPath, "project", globalServers))
+            add(mcpGroup(AiExplorerBundle.message("resources.global"), globalPath, "global", emptySet()))
+            add(mcpGroup(AiExplorerBundle.message("resources.project"), projectPath, "project", globalServers))
         }
     }
 
@@ -109,7 +109,9 @@ class KimiResourceStore(projectPath: Path) {
                     val url = config.get("url")?.asString
                     val target = command ?: url?.let(::safeUrlHost) ?: "MCP"
                     val enabled = config.get("enabled")?.asBoolean != false
-                    entries.add(node(name, path, scope, "$target · ${if (enabled) "включён" else "выключен"}${if (name in overridden) " · переопределяет глобальный" else ""}").apply {
+                    val status = AiExplorerBundle.message(if (enabled) "resources.enabled" else "resources.disabled")
+                    val override = if (name in overridden) " · ${AiExplorerBundle.message("resources.overrides")}" else ""
+                    entries.add(node(name, path, scope, "$target · $status$override").apply {
                         addProperty("serverId", "$path#$name")
                         add("config", JsonObject().apply {
                             addProperty("transport", config.get("transport")?.asString ?: if (command != null) "stdio" else "http")
@@ -124,18 +126,18 @@ class KimiResourceStore(projectPath: Path) {
                     })
                 }
             } catch (_: Exception) {
-                entries.add(node("Ошибка чтения конфигурации", path, scope, "Открыть файл"))
+                entries.add(node(AiExplorerBundle.message("resources.read.error"), path, scope, AiExplorerBundle.message("resources.open.file")))
             }
         }
-        return group(title, if (Files.isRegularFile(path)) path else null, scope, entries, if (entries.size() == 0) "Нет конфигурации" else null)
+        return group(title, if (Files.isRegularFile(path)) path else null, scope, entries, if (entries.size() == 0) AiExplorerBundle.message("resources.none") else null)
     }
 
     fun saveMcp(input: JsonObject) {
-        val scope = input.get("scope")?.asString ?: throw IllegalArgumentException("Scope is required")
+        val scope = input.get("scope")?.asString ?: throw IllegalArgumentException(AiExplorerBundle.message("error.scope.required"))
         val path = mcpPath(scope)
         val name = input.get("name")?.asString?.trim().orEmpty()
-        require(name.isNotEmpty()) { "Server name is required" }
-        require(!name.contains("#")) { "Invalid server name" }
+        require(name.isNotEmpty()) { AiExplorerBundle.message("error.server.name.required") }
+        require(!name.contains("#")) { AiExplorerBundle.message("error.server.name.invalid") }
         val oldName = input.get("oldName")?.asString?.takeIf(String::isNotBlank)
         val root = readMcp(path)
         val servers = root.getAsJsonObject("mcpServers") ?: JsonObject().also { root.add("mcpServers", it) }
@@ -145,7 +147,7 @@ class KimiResourceStore(projectPath: Path) {
         require(transport in setOf("stdio", "http", "sse"))
         if (transport == "stdio") {
             val command = input.get("command")?.asString?.trim().orEmpty()
-            require(command.isNotEmpty()) { "Command is required" }
+            require(command.isNotEmpty()) { AiExplorerBundle.message("error.command.required") }
             config.addProperty("command", command)
             config.remove("url")
             config.remove("transport")
@@ -153,10 +155,10 @@ class KimiResourceStore(projectPath: Path) {
             val url = input.get("url")?.asString?.trim().orEmpty()
             if (url.isNotEmpty()) {
                 val uri = URI(url)
-                require(uri.scheme in setOf("http", "https") && uri.host != null) { "Invalid URL" }
+                require(uri.scheme in setOf("http", "https") && uri.host != null) { AiExplorerBundle.message("error.url.invalid") }
                 config.addProperty("url", url)
             } else {
-                require(config.get("url")?.asString?.isNotBlank() == true) { "URL is required" }
+                require(config.get("url")?.asString?.isNotBlank() == true) { AiExplorerBundle.message("error.url.required") }
             }
             config.remove("command")
             config.remove("args")
@@ -175,9 +177,9 @@ class KimiResourceStore(projectPath: Path) {
             val env = config.getAsJsonObject("env") ?: JsonObject()
             envText.lines().map(String::trim).filter(String::isNotEmpty).forEach { line ->
                 val separator = line.indexOf('=')
-                require(separator > 0) { "Environment entry must be KEY=value" }
+                require(separator > 0) { AiExplorerBundle.message("error.env.format") }
                 val key = line.substring(0, separator)
-                require(Regex("[A-Za-z_][A-Za-z0-9_]*").matches(key)) { "Invalid environment variable" }
+                require(Regex("[A-Za-z_][A-Za-z0-9_]*").matches(key)) { AiExplorerBundle.message("error.env.name") }
                 env.addProperty(key, line.substring(separator + 1))
             }
             config.add("env", env)
@@ -197,7 +199,7 @@ class KimiResourceStore(projectPath: Path) {
     private fun mcpPath(scope: String): Path = when (scope) {
         "global" -> kimiHome.resolve("mcp.json")
         "project" -> project.resolve(".kimi-code/mcp.json")
-        else -> throw IllegalArgumentException("Invalid MCP scope")
+        else -> throw IllegalArgumentException(AiExplorerBundle.message("error.scope.invalid"))
     }
 
     private fun readMcp(path: Path): JsonObject {
@@ -304,7 +306,7 @@ class KimiResourceStore(projectPath: Path) {
         if (text != null) {
             val links = localMarkdownLinks(path, text)
             if (links.isNotEmpty()) item.add("children", JsonArray().apply {
-                links.forEach { add(node("Ссылка · ${it.name}", it, scope)) }
+                links.forEach { add(node("${AiExplorerBundle.message("resources.link")} · ${it.name}", it, scope)) }
             })
         }
         if (isSkill) item.addProperty("kind", "skill")

@@ -69,7 +69,7 @@
   function render() {
     const query=document.getElementById("search").value.trim().toLowerCase();
     const visible=filtered(nodes,query);
-    document.getElementById("tree").innerHTML=visible.length?visible.map((node,index)=>nodeHtml(node,String(index),!!query)).join(""):`<div class="empty">${query?"Ничего не найдено":kind==="mcp"?"MCP-серверы не настроены":"Файлы не найдены"}</div>`;
+    document.getElementById("tree").innerHTML=visible.length?visible.map((node,index)=>nodeHtml(node,String(index),!!query)).join(""):`<div class="empty">${query?"Ничего не найдено":window.AI_EXPLORER_LOCALE==="en"?"No files found":"Файлы не найдены"}</div>`;
     document.getElementById("footer").textContent=query?`${visible.length} разделов`:"Клик открывает файл · стрелка раскрывает группу";
     bind();
   }

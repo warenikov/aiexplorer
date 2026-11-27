@@ -19,9 +19,9 @@ class AiChatService(private val project: Project) {
         project.messageBus.syncPublisher(ChatSelectionListener.TOPIC).chatSelected(null)
     }
 
-    fun continueLatest() = openTerminal("Kimi Code — последняя сессия", listOf("--continue"))
+    fun continueLatest() = openTerminal(AiExplorerBundle.message("session.latest"), listOf("--continue"))
 
-    fun login() = openTerminal("Вход в Kimi Code", listOf("login"))
+    fun login() = openTerminal(AiExplorerBundle.message("session.login"), listOf("login"))
 
     fun openSession(session: KimiSessionSummary) = openSession(session.id, session.title)
 

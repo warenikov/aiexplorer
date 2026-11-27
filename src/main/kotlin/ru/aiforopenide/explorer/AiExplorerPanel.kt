@@ -20,7 +20,7 @@ class AiExplorerPanel(
     private val terminalPanel = KimiTerminalPanel(project, chatFile?.kimiArguments.orEmpty())
     private val cardLayout = CardLayout()
     private val content = JPanel(cardLayout)
-    private val toggleButton = JButton("Граф файлов")
+    private val toggleButton = JButton(AiExplorerBundle.message("graph.show"))
     private var graphPanel: KimiFileGraphPanel? = null
     private var graphVisible = false
     val preferredFocusComponent: JComponent
@@ -34,7 +34,7 @@ class AiExplorerPanel(
             isFocusPainted = false
             text = null
             icon = AllIcons.Actions.Share
-            toolTipText = "Показать граф активности"
+            toolTipText = AiExplorerBundle.message("graph.show")
             accessibleContext.accessibleName = toolTipText
             horizontalAlignment = SwingConstants.LEFT
             border = JBUI.Borders.empty(5, 8)
@@ -45,7 +45,7 @@ class AiExplorerPanel(
             if (graphVisible) showGraph()
             cardLayout.show(content, if (graphVisible) "graph" else "terminal")
             toggleButton.icon = if (graphVisible) AllIcons.Debugger.Console else AllIcons.Actions.Share
-            toggleButton.toolTipText = if (graphVisible) "Вернуться в терминал" else "Показать граф активности"
+            toggleButton.toolTipText = AiExplorerBundle.message(if (graphVisible) "terminal.show" else "graph.show")
             toggleButton.accessibleContext.accessibleName = toggleButton.toolTipText
             if (!graphVisible) requestTerminalFocus()
         }
@@ -57,6 +57,10 @@ class AiExplorerPanel(
         content.add(terminalPanel, "terminal")
         add(content, BorderLayout.CENTER)
         Disposer.register(this, terminalPanel)
+        project.messageBus.connect(this).subscribe(AiExplorerLocaleListener.TOPIC, AiExplorerLocaleListener {
+            toggleButton.toolTipText = AiExplorerBundle.message(if (graphVisible) "terminal.show" else "graph.show")
+            toggleButton.accessibleContext.accessibleName = toggleButton.toolTipText
+        })
         project.messageBus.connect(this).subscribe(TerminalInputListener.TOPIC, TerminalInputListener { text ->
             if (chatFile != null && com.intellij.openapi.fileEditor.FileEditorManager.getInstance(project).selectedFiles.any { it === chatFile }) {
                 terminalPanel.insertText(text)

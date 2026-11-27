@@ -78,7 +78,7 @@ class KimiSessionGraphReader(
             "tool.call" -> JsonObject().apply {
                 addProperty("toolCallId", event.get("toolCallId")?.asString ?: return null)
                 addProperty("kind", toolKind(event))
-                addProperty("title", event.get("name")?.asString ?: "Инструмент")
+                addProperty("title", event.get("name")?.asString ?: AiExplorerBundle.message("graph.tool"))
                 addProperty("status", "in_progress")
                 add("rawInput", event.get("args") ?: JsonObject())
             }
